@@ -11,9 +11,9 @@ svtc-sync - Synchronization of various platforms with a club membership referenc
 SVTC has a need to periodically check which individuals that are not paying club members might be subscribed or affilated with various platforms the club uses to provide member benefits. 
 Such individuals should be identified and contacted to remind them of opportunities to become members. 
 
-This cli tool will use public APIs of platforms such as Strava and Slack and fetch lists of users affiliated with SVTC and compare their user data to a refrence file provided by the ClubExpress management platform.
+This cli tool will use public APIs of platforms such as Strava and Slack to fetch lists of users affiliated with SVTC and compare their user data to a refrence file provided by the ClubExpress management platform. The data of this platform is regarded to be the source of truth for membership data, such as contact information and status.
 
-svtc-sync will take a reference file specification as optional parameter ( default ./ClubExpressMemberList.csv) in the working directory. This refrence file is expected to be a valid comma separated value file with a valid header in the form of:
+svtc-sync will take the reference file as an optional parameteri. The default is ClubExpressMemberList.csv in the current working directory. This file is expected to be a valid comma separated value (CSV) format file with a header in the form of:
 
     firstname,lastname,email
     dave,scott,dave@gmail.com
@@ -26,7 +26,7 @@ Usage information can be obtained vi the flag -h or -help.
 
 ## EXAMPLE USE
 
-Specify a reference member data file validate Strava SVTC club athletes against it.
+Specify a reference member data file and validate Strava SVTC club athletes against it.
 
     svtc-sync -ref /usr/local/etc/MemberData.csv strava
 
