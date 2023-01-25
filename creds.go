@@ -169,3 +169,40 @@ func (m *CredsModel) WriteStravaUserCreds(creds *StravaCreds, fname string) erro
 }
 
 // --------------------------------------------------------------------------------------------
+
+func (m *CredsModel) GetSlackAccess(bfile string) (string, error) {
+
+	c, err := m.ReadSlackBotCreds(bfile)
+	if err != nil {
+		return "", fmt.Errorf("unable to read Slack user credentials %w", err)
+	}
+
+	return c.Access_Token, nil
+}
+
+// --------------------------------------------------------------------------------------------
+
+func (m *CredsModel) ReadSlackBotCreds(fname string) (*SlackCreds, error) {
+
+	creds := &SlackCreds{}
+
+	file, err := os.Open(fname)
+	if err != nil {
+		return nil, fmt.Errorf("file open failed: %w", err)
+	}
+	defer file.Close()
+
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("file read failed: %w", err)
+	}
+
+	err = json.Unmarshal(data, &creds)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal json data failed: %w", err)
+	}
+
+	return creds, nil
+}
+
+// --------------------------------------------------------------------------------------------

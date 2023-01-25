@@ -9,14 +9,13 @@ import (
 )
 
 type config struct {
-	mfile           string // Master CSV file of current Club Members
-	source          string // Source data to check against master Member reference
-	athleteid       int    // Strava user / athlete sctc-sync@svtriclub.org
-	clubid          int    // Strava Club Silicon Valley Triathlon Club
-	teamid          string // Slack Team / Workspace for Silicon Valley Triathlon Club
-	channelid       string // "general" Channel in SVTC Workspace
-	usercredsfile   string // Strava User API credentials JSON file
-	clientcredsfile string // Strava and Slack Client credentials JSON file
+	mfile        string // Master CSV file of current Club Members
+	source       string // Source data to check against master Member reference
+	athleteid    int    // Strava user / athlete sctc-sync@svtriclub.org
+	clubid       int    // Strava Club Silicon Valley Triathlon Club
+	ucfilestrava string // Strava User API credentials JSON file
+	bcfileslack  string // Slack Bot API credentials JSON file
+	ccfile       string // Strava and Slack Client credentials JSON file
 }
 
 type application struct {
@@ -43,19 +42,17 @@ func main() {
 	flag.Parse()
 
 	// Assign last cli argument as operator to specify source of member data to compare to reference
-	// If value is nil or not a valid operator (strava|slack) it is handled later in main - Fix this to be done here.
+	// If value is nil or not a valid operator (strava|slack) it is handled later in main
+	// FIXME - this should be handled here instead
 	if len(os.Args) > 1 {
 		cfg.source = os.Args[len(os.Args)-1]
 	}
 
 	cfg.athleteid = 112729399
 	cfg.clubid = 449951
-	cfg.teamid = "T02UAHW031S"
-	cfg.channelid = "C02TTL455EK"
-	cfg.usercredsfile = "./.secret/user_credentials.json"
-	cfg.clientcredsfile = "./.secret/api_credentials.json"
-
-	const slack_access_token = "xoxb-2962608003060-4657504055463-7b2qlw829v2a8qHz2ffIZJYm"
+	cfg.ucfilestrava = "./.secret/user_creds_strava.json"
+	cfg.bcfileslack = "./.secret/bot_creds_slack.json"
+	cfg.ccfile = "./.secret/api_creds.json"
 
 	// --------------------------------------------------------------------------------------------
 
@@ -78,7 +75,13 @@ func main() {
 
 	// --------------------------------------------------------------------------------------------
 	// Need to do some file validation here:
-	// - Is the file a CSV? Does it have proper headers? Are the columns formatted right?
+	// FIXME - Is the file a CSV? Does it have proper headers? Are the columns formatted right?
+
+	/*
+		if app.clubCSV.Validate() {
+			log.Printf("[Validate] File %s looks ok", cfg.mfile)
+		}
+	*/
 
 	// Get list of members from CSV file
 	mlCSV, err := app.clubCSV.MemberList()
@@ -96,6 +99,14 @@ func main() {
 
 		log.Printf("[main] Matching Slack Workspace Members \n")
 
+		// Read Slack Bot Access Token from credentials file.
+		slack_access_token, err := app.creds.GetSlackAccess(cfg.bcfileslack)
+		if err != nil {
+			log.Printf("[ReadSlackAccess] Unable to read Slack bot credentials %s", err)
+			return
+		}
+		log.Printf("[main] Retrieved Slack api access token from file \n")
+
 		// Get list of Slack team members of workspace that app is installed in
 		mlSlack, err := app.workspace.UserList(slack_access_token)
 		if err != nil {
@@ -107,7 +118,8 @@ func main() {
 		// Iterate over list of Slack workspace users/members and check if present in reference member list
 		for _, mSlack := range mlSlack {
 			if !app.clubCSV.IsMember(mlCSV, string("slack"), mSlack) {
-				fmt.Printf("%s %s (%s) \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+				// fmt.Printf("%s %s (%s) \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+				fmt.Printf("%s \n", mSlack.Profile.Email)
 			}
 		}
 
@@ -117,7 +129,7 @@ func main() {
 
 		// Check Strava Access Token expiration date. Request new one if expired.
 		log.Printf("[main] Check for expiration of Strava api access token \n")
-		strava_access_token, err := app.creds.CheckStravaExp(cfg.athleteid, cfg.usercredsfile, cfg.clientcredsfile)
+		strava_access_token, err := app.creds.CheckStravaExp(cfg.athleteid, cfg.ucfilestrava, cfg.ccfile)
 		if err != nil {
 			log.Printf("[CheckStravaExp] refresh Strava authorization failed %s", err)
 			return

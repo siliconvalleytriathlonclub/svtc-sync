@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
 	"strings"
@@ -29,12 +30,21 @@ func (m *ClubCSVModel) MemberList() ([]*MemberSVTC, error) {
 
 // --------------------------------------------------------------------------------------------
 
+func (m *ClubCSVModel) Validate() bool {
+
+	return true
+
+}
+
+// --------------------------------------------------------------------------------------------
+
 func (m *ClubCSVModel) IsMember(reference []*MemberSVTC, source string, data interface{}) bool {
 
 	switch source {
 
 	case "strava":
 
+		// Assert type to Athlete for Strava club members
 		mStrava := data.(Athlete)
 		for _, m := range reference {
 			if strings.EqualFold(mStrava.FirstName, m.FirstName) &&
@@ -45,6 +55,7 @@ func (m *ClubCSVModel) IsMember(reference []*MemberSVTC, source string, data int
 
 	case "slack":
 
+		// Assert type to Member for Slack workspace users
 		mSlack := data.(Member)
 		for _, m := range reference {
 			if (strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
