@@ -26,20 +26,16 @@ type SlackCreds struct {
 	Access_Token   string `json:"access_token"`   // Permanent Access Token
 }
 
-//
 // Strava Athlete data structure is used to hold response data from the Strava List Club Members (getClubMembersById) API call
 // which returns an array of limited relevant Strava Athlete data.
 // Currently only first name and the initial of last name are returned.
-//
 type Athlete struct {
 	FirstName string `json:"firstname"`
 	LastName  string `json:"lastname"`
 }
 
-//
 // Club data structure is used to hold response data from the Strava Get Club (getClubById) API call
 // which returns a DetailedClub object.
-//
 type Club struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
@@ -71,10 +67,11 @@ type ResponseMember struct {
 }
 
 type Member struct {
-	ID      string  `json:"id"`
-	Team_ID string  `json:"team_id"`
-	Name    string  `json:"name"`
-	Profile Profile `json:"profile"`
+	ID                 string  `json:"id"`
+	Team_ID            string  `json:"team_id"`
+	Name               string  `json:"name"`
+	Profile            Profile `json:"profile"`
+	Is_Email_Confirmed bool    `json:"is_email_confirmed"`
 }
 
 type Profile struct {

@@ -34,7 +34,7 @@ func main() {
 	// Assign user supplied reference file or use default
 	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMemberList.csv", "Reference CSV file of current Club Members")
 
-	// Custom usage output, override standard usage function
+	// Custom usage output, override standard flag.Usage function
 	flag.Usage = func() {
 		fmt.Printf("Usage: svtc-sync [-ref file] [-h] (strava|slack) \n")
 	}
@@ -117,6 +117,9 @@ func main() {
 
 		// Iterate over list of Slack workspace users/members and check if present in reference member list
 		for _, mSlack := range mlSlack {
+			if !mSlack.Is_Email_Confirmed {
+				continue
+			}
 			if !app.clubCSV.IsMember(mlCSV, string("slack"), mSlack) {
 				// fmt.Printf("%s %s (%s) \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
 				fmt.Printf("%s \n", mSlack.Profile.Email)
