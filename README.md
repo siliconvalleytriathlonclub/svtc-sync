@@ -1,12 +1,12 @@
-##NAME
+## NAME
 
 svtc-sync - Synchronization of various platforms with a club membership reference
 
-##SYNOPSIS
+## SYNOPSIS
 
     svtc-sync [-ref file] [-h] (strava|slack)
 
-##DESCRIPTION
+## DESCRIPTION
 
 SVTC has a need to periodically check which individuals that are not paying club members might be subscribed or affilated with various platforms the club uses to provide member benefits. 
 Such individuals should be identified and contacted to remind them of opportunities to become members. 
@@ -24,7 +24,7 @@ The tool will take an argument specifying the platform to verify users for. Curr
 
 Usage information can be obtained vi the flag -h or -help.
 
-##EXAMPLE USE
+## EXAMPLE USE
 
 Specify a reference member data file validate Strava SVTC club athletes against it.
 
