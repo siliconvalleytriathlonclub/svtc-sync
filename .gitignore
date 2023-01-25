@@ -1,0 +1,11 @@
+# Ignore Mac system files
+.DS_Store
+
+# Ignore the .secret directory
+.secret/*
+
+# Ignore member data file
+ClubExpressMemberList.csv
+
+# Ignore notes.txt
+notes.txt
