@@ -4,8 +4,13 @@
 # Ignore the .secret directory
 .secret/*
 
-# Ignore member data file
+# Ignore member data files
 ClubExpressMemberList.csv
+ClubExpressSVTCMemberListAllTime.csv
 
-# Ignore notes.txt
-notes.txt
+#Ignore analysis text files
+strava_diff.txt
+slack_diff.txt
+
+#Ignore deploy directory
+deploy/*

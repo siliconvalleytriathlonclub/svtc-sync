@@ -11,6 +11,7 @@ import (
 type config struct {
 	mfile        string // Master CSV file of current Club Members
 	source       string // Source data to check against master Member reference
+	output       string // NF (not Found), Active status or nil
 	athleteid    int    // Strava user / athlete sctc-sync@svtriclub.org
 	clubid       int    // Strava Club Silicon Valley Triathlon Club
 	ucfilestrava string // Strava User API credentials JSON file
@@ -33,10 +34,24 @@ func main() {
 
 	// Assign user supplied reference file or use default
 	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMemberList.csv", "Reference CSV file of current Club Members")
+	// Filter output to show either Not Found (NF) or Not Active (NA) records only
+	flag.StringVar(&cfg.output, "out", "", "Optionally ouput only Not Found or Not Active Records")
+
+	/*
+	   flag.Func("out", "Optionally ouput only Not Found or Not Active Records", func(flagValue string) error {
+	       for _, val := range []string{"NF", "NA"} {
+	           if flagValue == allowedValue {
+	               environment = flagValue
+	               return nil
+	           }
+	       }
+	       return errors.New(`must be one of "development", "staging" or "production"`)
+	   })
+	*/
 
 	// Custom usage output, override standard flag.Usage function
 	flag.Usage = func() {
-		fmt.Printf("Usage: svtc-sync [-ref file] [-h] (strava|slack) \n")
+		fmt.Printf("Usage: svtc-sync [-h] [-out NF|NA] [-ref file] (strava|slack) \n")
 	}
 
 	flag.Parse()
@@ -97,8 +112,6 @@ func main() {
 
 	case "slack":
 
-		log.Printf("[main] Matching Slack Workspace Members \n")
-
 		// Read Slack Bot Access Token from credentials file.
 		slack_access_token, err := app.creds.GetSlackAccess(cfg.bcfileslack)
 		if err != nil {
@@ -117,18 +130,28 @@ func main() {
 
 		// Iterate over list of Slack workspace users/members and check if present in reference member list
 		for _, mSlack := range mlSlack {
+
+			// Ignore bot or app records (this flag is set to false for those in Slack)
 			if !mSlack.Is_Email_Confirmed {
 				continue
 			}
-			if !app.clubCSV.IsMember(mlCSV, string("slack"), mSlack) {
-				// fmt.Printf("%s %s (%s) \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
-				fmt.Printf("%s \n", mSlack.Profile.Email)
+
+			// Check if record is member, based on criteria implemented in this function
+			m := app.clubCSV.CheckMember(mlCSV, string("slack"), mSlack)
+
+			if m == nil {
+				if cfg.output == "NF" || cfg.output == "" {
+					fmt.Printf("%s %s (%s) - Not Found \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+				}
+			} else {
+				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
+					fmt.Printf("%s %s %s - %s on %s\n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				}
 			}
+
 		}
 
 	case "strava":
-
-		log.Printf("[main] Matching Strava Club Members \n")
 
 		// Check Strava Access Token expiration date. Request new one if expired.
 		log.Printf("[main] Check for expiration of Strava api access token \n")
@@ -156,9 +179,20 @@ func main() {
 
 		// Iterate over list of Strava club athletes and check if present in reference member list
 		for _, mStrava := range mlStrava {
-			if !app.clubCSV.IsMember(mlCSV, string("strava"), mStrava) {
-				fmt.Printf("%s %s \n", mStrava.FirstName, mStrava.LastName)
+
+			// Check if record is member, based on criteria implemented in this function
+			m := app.clubCSV.CheckMember(mlCSV, string("strava"), mStrava)
+
+			if m == nil {
+				if cfg.output == "NF" || cfg.output == "" {
+					fmt.Printf("%s %s - Not Found \n", mStrava.FirstName, mStrava.LastName)
+				}
+			} else {
+				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
+					fmt.Printf("%s %s %s - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				}
 			}
+
 		}
 
 	default:

@@ -37,41 +37,41 @@ func (m *ClubCSVModel) Validate() bool {
 
 // --------------------------------------------------------------------------------------------
 
-func (m *ClubCSVModel) IsMember(reference []*MemberSVTC, source string, data interface{}) bool {
+func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, source string, data interface{}) *MemberSVTC {
 
 	switch source {
-
-	case "strava":
-
-		// Assert type to Athlete for Strava club members
-		mStrava := data.(Athlete)
-
-		// firstname and first letter lastname match
-		for _, m := range reference {
-			if strings.EqualFold(mStrava.FirstName, m.FirstName) &&
-				strings.EqualFold(string(mStrava.LastName[0]), string(m.LastName[0])) {
-				return true
-			}
-		}
 
 	case "slack":
 
 		// Assert type to Member for Slack workspace users
 		mSlack := data.(Member)
 
-		// either firstname and lastname match
-		// or email matches
+		// Match on either firstname and lastname or match on email matches
 		for _, m := range reference {
 			if (strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
 				strings.EqualFold(mSlack.Profile.LastName, m.LastName)) ||
 				strings.EqualFold(mSlack.Profile.Email, m.Email) {
-				return true
+				return m
+			}
+		}
+
+	case "strava":
+
+		// Assert type to Athlete for Strava club members
+		mStrava := data.(Athlete)
+
+		// Trim leading or trailing white space from Strava names
+		// Match on firstname and first letter lastname
+		for _, m := range reference {
+			if strings.EqualFold(strings.TrimSpace(mStrava.FirstName), m.FirstName) &&
+				strings.EqualFold(strings.TrimSpace(string(mStrava.LastName[0])), string(m.LastName[0])) {
+				return m
 			}
 		}
 
 	}
 
-	return false
+	return nil
 
 }
 

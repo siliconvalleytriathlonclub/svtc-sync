@@ -54,8 +54,12 @@ type Club struct {
 type MemberSVTC struct {
 	ID        int    `csv:"-"`         // unused currently
 	FirstName string `csv:"firstname"` // First name of member
+	Middle    string `csv:"middle"`    // Middle initial or name
 	LastName  string `csv:"lastname"`  // Last name of member
 	Email     string `csv:"email"`     // Member Email
+	Status    string `csv:"status"`    // Member status (Expired, Active, Dropped)
+	Joined    string `csv:"joined"`    // Date when joined M/D/YY
+	Expired   string `csv:"expired"`   // Date when expired / will expire M/D/YY
 }
 
 // ------------------------------------------------------------------------------------------------
