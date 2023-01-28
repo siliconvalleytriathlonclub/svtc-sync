@@ -4,7 +4,7 @@ svtc-sync - Synchronization of various platforms with a club membership referenc
 
 ## SYNOPSIS
 
-    svtc-sync [-ref file] [-h] (strava|slack)
+    svtc-sync [-h] [-out NF|NA] [-ref file] (strava|slack)
 
 ## DESCRIPTION
 
@@ -15,12 +15,14 @@ This cli tool will use public APIs of platforms such as Strava and Slack to fetc
 
 svtc-sync will take the reference file as an optional parameteri. The default is ClubExpressMemberList.csv in the current working directory. This file is expected to be a valid comma separated value (CSV) format file with a header in the form of:
 
-    firstname,lastname,email
-    dave,scott,dave@gmail.com
+    firstname,middle,lastname,email,status,expiration
+    Dave,TheMan,Scott,dave@gmail.com,Expired,12/31/22
 
 The sequence of header/fields does not matter.
 
 The tool will take an argument specifying the platform to verify users for. Currently values can be either "strava" or "slack". This command line argument is non optional.
+
+Optionally, an output filter may be applied to determine whether to show Not Active (NA) ot Not FOund (NF) records. DEfault being to show both.
 
 Usage information can be obtained vi the flag -h or -help.
 
@@ -30,9 +32,9 @@ Specify a reference member data file and validate Strava SVTC club athletes agai
 
     svtc-sync -ref /usr/local/etc/MemberData.csv strava
 
-Use the default reference member csv and validate Slack SVTC workspace users against it.
+Use the default reference member csv and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed as not active.
 
-    svtc-sync slack
+    svtc-sync -out NA slack
 
 Get usage information (same as -h, --h or -help).
 
