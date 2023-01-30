@@ -4,7 +4,7 @@ svtc-sync - Synchronization of various platforms with a club membership referenc
 
 ## SYNOPSIS
 
-    svtc-sync [-h] [-out=NF|NA] [-ref=file] (strava|slack)
+    svtc-sync [-h] [-out NF|NA] [-ref file] (strava|slack)
 
 ## DESCRIPTION
 
