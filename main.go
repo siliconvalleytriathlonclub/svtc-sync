@@ -33,7 +33,7 @@ func main() {
 	var cfg config
 
 	// Assign user supplied reference file or use default
-	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressSVTCMemberListAllTime.csv", "Reference CSV file of current Club Members")
+	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMember.csv", "Reference CSV file of current Club Members")
 
 	// Filter output to show either Not Found (NF) or Not Active (NA) records only
 	// Custom function to allow to validate multiple option values for a flag
