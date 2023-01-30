@@ -33,21 +33,11 @@ func main() {
 	var cfg config
 
 	// Assign user supplied reference file or use default
-	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMemberList.csv", "Reference CSV file of current Club Members")
-	// Filter output to show either Not Found (NF) or Not Active (NA) records only
-	flag.StringVar(&cfg.output, "out", "", "Optionally ouput only Not Found or Not Active Records")
+	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressSVTCMemberListAllTime.csv", "Reference CSV file of current Club Members")
 
-	/*
-	   flag.Func("out", "Optionally ouput only Not Found or Not Active Records", func(flagValue string) error {
-	       for _, val := range []string{"NF", "NA"} {
-	           if flagValue == allowedValue {
-	               environment = flagValue
-	               return nil
-	           }
-	       }
-	       return errors.New(`must be one of "development", "staging" or "production"`)
-	   })
-	*/
+	// Filter output to show either Not Found (NF) or Not Active (NA) records only
+	// Custom function to allow to validate multiple option values for a flag
+	flag.StringVar(&cfg.output, "out", "", "Output only Not Found or Not Active records")
 
 	// Custom usage output, override standard flag.Usage function
 	flag.Usage = func() {
@@ -56,11 +46,25 @@ func main() {
 
 	flag.Parse()
 
-	// Assign last cli argument as operator to specify source of member data to compare to reference
-	// If value is nil or not a valid operator (strava|slack) it is handled later in main
-	// FIXME - this should be handled here instead
+	// Check if output option is in the list of supported options, print usage info and exit if not
+	err := CheckArgs(&cfg.output, cfg.output, []string{"NF", "NA", ""})
+	if err != nil {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	// Assign last cli argument as operator to specify source of member data to validate.
+	// Exit and print usage inflo if not specified. Check if operator is in list of supported platforms,
+	// exit and print usage info if not
 	if len(os.Args) > 1 {
-		cfg.source = os.Args[len(os.Args)-1]
+		err := CheckArgs(&cfg.source, os.Args[len(os.Args)-1], []string{"strava", "slack"})
+		if err != nil {
+			flag.Usage()
+			os.Exit(0)
+		}
+	} else {
+		flag.Usage()
+		os.Exit(0)
 	}
 
 	cfg.athleteid = 112729399
@@ -73,7 +77,12 @@ func main() {
 
 	file, err := os.Open(cfg.mfile)
 	if err != nil {
-		log.Fatal(err)
+		if os.IsNotExist(err) {
+			fmt.Printf("[main] File not found: %s \n", cfg.mfile)
+			os.Exit(1)
+		} else {
+			log.Fatal(err) // log print and exit(1)
+		}
 	}
 	defer file.Close()
 
@@ -89,14 +98,22 @@ func main() {
 	}
 
 	// --------------------------------------------------------------------------------------------
-	// Need to do some file validation here:
-	// FIXME - Is the file a CSV? Does it have proper headers? Are the columns formatted right?
 
-	/*
-		if app.clubCSV.Validate() {
-			log.Printf("[Validate] File %s looks ok", cfg.mfile)
+	// Validate CSV file against RFC4180 specs. Returns list of parsing errors with line numbers.
+	ErrList, err := app.clubCSV.Validate()
+	if err != nil {
+		log.Printf("[Validate] Error processing file for validation: %s", err)
+		return
+	}
+
+	// List CSV validation parsing errors encountered (if any) and exit program
+	if len(ErrList) > 0 {
+		log.Printf("[main] Parsing errors encountered validating CSV file")
+		for _, e := range ErrList {
+			fmt.Printf("[%d] %s \n", e.Line, e.Err.Error())
 		}
-	*/
+		return
+	}
 
 	// Get list of members from CSV file
 	mlCSV, err := app.clubCSV.MemberList()
@@ -139,13 +156,14 @@ func main() {
 			// Check if record is member, based on criteria implemented in this function
 			m := app.clubCSV.CheckMember(mlCSV, string("slack"), mSlack)
 
+			// Determine output based on configuration settings
 			if m == nil {
 				if cfg.output == "NF" || cfg.output == "" {
 					fmt.Printf("%s %s (%s) - Not Found \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
 				}
 			} else {
 				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
-					fmt.Printf("%s %s %s - %s on %s\n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					fmt.Printf("%s %s (%s) - %s on %s\n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 				}
 			}
 
@@ -183,24 +201,21 @@ func main() {
 			// Check if record is member, based on criteria implemented in this function
 			m := app.clubCSV.CheckMember(mlCSV, string("strava"), mStrava)
 
+			// Determine output based on configuration settings
 			if m == nil {
 				if cfg.output == "NF" || cfg.output == "" {
 					fmt.Printf("%s %s - Not Found \n", mStrava.FirstName, mStrava.LastName)
 				}
 			} else {
 				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
-					fmt.Printf("%s %s %s - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					fmt.Printf("%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 				}
 			}
 
 		}
 
-	default:
-
-		log.Printf("[main] No supported source provided. Must be (strava|slack) \n")
-
 	}
 
-	// --------------------------------------------------------------------------------------------
+	os.Exit(0)
 
 }

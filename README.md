@@ -20,21 +20,23 @@ svtc-sync will take the reference file as an optional parameteri. The default is
 
 The order of header/fields does not matter.
 
+Validation of the specified CSV file is performed prior to further processing. It returns a list of parsing errros if encountered and will exit.
+
 The tool will take an argument specifying the platform to verify users for. Currently values can be either "strava" or "slack". This command line argument is non optional.
 
-Optionally, an output filter may be applied to determine whether to show Not Active (NA) ot Not Found (NF) records. DEfault being to show both.
+Optionally, an output filter may be applied to determine whether to show Not Active (NA) ot Not Found (NF) records. Default being to show both.
 
-Usage information can be obtained vi the flag -h or -help.
+Usage information can be obtained via the flag -h or -help.
 
 ## EXAMPLE USE
 
 Specify a reference member data file and validate Strava SVTC club athletes against it.
 
-    svtc-sync -ref=/usr/local/etc/MemberData.csv strava
+    svtc-sync -ref /usr/local/etc/MemberData.csv strava
 
-Use the default reference member csv and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed as not active.
+Use the default reference member csv file and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed as not active.
 
-    svtc-sync -out=NA slack
+    svtc-sync -out NA slack
 
 Get usage information (same as -h, --h or -help).
 
