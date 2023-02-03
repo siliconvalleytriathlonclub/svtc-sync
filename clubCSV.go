@@ -16,6 +16,7 @@ type ClubCSVModel struct {
 
 // --------------------------------------------------------------------------------------------
 
+// Function to deserialize records from a CSV file into a slice of MemberSVTC structs
 func (m *ClubCSVModel) MemberList() ([]*MemberSVTC, error) {
 
 	ml := []*MemberSVTC{}
@@ -31,7 +32,12 @@ func (m *ClubCSVModel) MemberList() ([]*MemberSVTC, error) {
 
 // --------------------------------------------------------------------------------------------
 
-func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, source string, data interface{}) *MemberSVTC {
+// Function to compare a member record based on a specified source platform and data object, with a reference data set.
+// Returns a result set of matches based on the specified criteria
+// Config setting from the main function are passed via the cfg paramater
+func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, cfg config, source string, data interface{}) []*MemberSVTC {
+
+	ml := []*MemberSVTC{}
 
 	switch source {
 
@@ -40,13 +46,21 @@ func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, source string, data 
 		// Assert type to Member for Slack workspace users
 		mSlack := data.(Member)
 
-		// Match on either firstname and lastname or match on email matches
+		// Iterate over refrence data to apply filter criteria
 		for _, m := range reference {
+
+			// Match on either firstname and lastname or match on email matches
 			if (strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
 				strings.EqualFold(mSlack.Profile.LastName, m.LastName)) ||
 				strings.EqualFold(mSlack.Profile.Email, m.Email) {
-				return m
+
+				// Ignore records with Expired dates preceeding config exp date spec
+				if GetDate(m.Expired).After(GetDate(cfg.expire)) {
+					ml = append(ml, m)
+				}
+
 			}
+
 		}
 
 	case "strava":
@@ -54,18 +68,26 @@ func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, source string, data 
 		// Assert type to Athlete for Strava club members
 		mStrava := data.(Athlete)
 
-		// Trim leading or trailing white space from Strava names
-		// Match on firstname and first letter lastname
+		// Iterate over refrence data to apply filter criteria
 		for _, m := range reference {
+
+			// Trim leading or trailing white space from Strava names
+			// Match on firstname and first letter lastname
 			if strings.EqualFold(strings.TrimSpace(mStrava.FirstName), m.FirstName) &&
 				strings.EqualFold(strings.TrimSpace(string(mStrava.LastName[0])), string(m.LastName[0])) {
-				return m
+
+				// Ignore records with Expired dates preceeding config exp date spec
+				if GetDate(m.Expired).After(GetDate(cfg.expire)) {
+					ml = append(ml, m)
+				}
+
 			}
+
 		}
 
 	}
 
-	return nil
+	return ml
 
 }
 

@@ -6,12 +6,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"time"
 )
 
 type config struct {
 	mfile        string // Master CSV file of current Club Members
 	source       string // Source data to check against master Member reference
-	output       string // NF (not Found), Active status or nil
+	output       string // NF (not Found), Active status, Duplucates or nil
+	expire       string // Date in the format M/D/YY to filter out earlier expire dates
 	athleteid    int    // Strava user / athlete sctc-sync@svtriclub.org
 	clubid       int    // Strava Club Silicon Valley Triathlon Club
 	ucfilestrava string // Strava User API credentials JSON file
@@ -35,20 +38,29 @@ func main() {
 	// Assign user supplied reference file or use default
 	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMemberList.csv", "Reference CSV file of current Club Members")
 
-	// Filter output to show either Not Found (NF) or Not Active (NA) records only
-	// Custom function to allow to validate multiple option values for a flag
+	// Filter output to show either Not Found (NF), Not Active (NA) or Duplicate (DUP)records only
 	flag.StringVar(&cfg.output, "out", "", "Output only Not Found or Not Active records")
+
+	// Ignore records with an Expire date field that is before this specified date
+	flag.StringVar(&cfg.expire, "exp", "1/1/01", "Ignore records with Expiration prior to this date")
 
 	// Custom usage output, override standard flag.Usage function
 	flag.Usage = func() {
-		fmt.Printf("Usage: svtc-sync [-h] [-out NF|NA] [-ref file] (strava|slack) \n")
+		fmt.Printf("Usage: svtc-sync [-h] [-out NF|NA|DUP] [-exp date] [-ref file] (strava|slack) \n")
 	}
 
 	flag.Parse()
 
 	// Check if output option is in the list of supported options, print usage info and exit if not
-	err := CheckArgs(&cfg.output, cfg.output, []string{"NF", "NA", ""})
+	err := CheckArgs(&cfg.output, cfg.output, []string{"NF", "NA", "DUP", ""})
 	if err != nil {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	// Validate expire option to ensure it is in the expected date format (M/D/YY)
+	// Exit and print usage info if not.
+	if GetDate(cfg.expire).IsZero() {
 		flag.Usage()
 		os.Exit(0)
 	}
@@ -69,6 +81,7 @@ func main() {
 
 	cfg.athleteid = 112729399
 	cfg.clubid = 449951
+
 	cfg.ucfilestrava = "./.secret/user_creds_strava.json"
 	cfg.bcfileslack = "./.secret/bot_creds_slack.json"
 	cfg.ccfile = "./.secret/api_creds.json"
@@ -145,6 +158,8 @@ func main() {
 		}
 		log.Printf("[main] Request list of %d workspace users from Slack web api", len(mlSlack))
 
+		log.Printf("[main] Generating %s output of matches with %s \n\n", cfg.output, cfg.mfile)
+
 		// Iterate over list of Slack workspace users/members and check if present in reference member list
 		for _, mSlack := range mlSlack {
 
@@ -154,17 +169,47 @@ func main() {
 			}
 
 			// Check if record is member, based on criteria implemented in this function
-			m := app.clubCSV.CheckMember(mlCSV, string("slack"), mSlack)
+			ml := app.clubCSV.CheckMember(mlCSV, cfg, string("slack"), mSlack)
 
 			// Determine output based on configuration settings
-			if m == nil {
-				if cfg.output == "NF" || cfg.output == "" {
-					fmt.Printf("%s %s (%s) - Not Found \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+			switch cfg.output {
+
+			case "NF":
+
+				// Print record not found in reference
+				if len(ml) == 0 {
+					fmt.Printf("[%s %s (%s)] Not Found \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
 				}
-			} else {
-				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
-					fmt.Printf("%s %s (%s) - %s on %s\n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+
+			case "NA":
+
+				// Iterate over result set and print all record whose status is not active
+				for _, m := range MemberSort(ml) {
+					if m.Status != "Active" {
+						fmt.Printf("%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					}
 				}
+
+			case "DUP":
+
+				if len(ml) > 1 {
+
+					fmt.Printf("[%s %s (%s)] \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+					for _, m := range MemberSort(ml) {
+						fmt.Printf("\t%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					}
+
+				}
+
+			default:
+
+				// Iterate over result set and print all records grouped by test record.
+				//  Note this will include not found records (with no results) as well.
+				fmt.Printf("[%s %s (%s)] \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+				for _, m := range MemberSort(ml) {
+					fmt.Printf("\t%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				}
+
 			}
 
 		}
@@ -195,21 +240,50 @@ func main() {
 		}
 		log.Printf("[main] Request list of %d club athletes from Strava api", len(mlStrava))
 
+		log.Printf("[main] Generating %s output of matches with %s \n\n", cfg.output, cfg.mfile)
+
 		// Iterate over list of Strava club athletes and check if present in reference member list
 		for _, mStrava := range mlStrava {
 
 			// Check if record is member, based on criteria implemented in this function
-			m := app.clubCSV.CheckMember(mlCSV, string("strava"), mStrava)
+			ml := app.clubCSV.CheckMember(mlCSV, cfg, string("strava"), mStrava)
 
 			// Determine output based on configuration settings
-			if m == nil {
-				if cfg.output == "NF" || cfg.output == "" {
-					fmt.Printf("%s %s - Not Found \n", mStrava.FirstName, mStrava.LastName)
+			switch cfg.output {
+
+			case "NF":
+
+				// Print record not found in reference
+				if len(ml) == 0 {
+					fmt.Printf("[%s %s] Not Found \n", mStrava.FirstName, mStrava.LastName)
 				}
-			} else {
-				if m.Status != "Active" && (cfg.output == "NA" || cfg.output == "") {
-					fmt.Printf("%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+
+			case "NA":
+
+				for _, m := range MemberSort(ml) {
+					if m.Status != "Active" {
+						fmt.Printf("%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					}
 				}
+
+			case "DUP":
+
+				if len(ml) > 1 {
+
+					fmt.Printf("[%s %s] \n", mStrava.FirstName, mStrava.LastName)
+					for _, m := range MemberSort(ml) {
+						fmt.Printf("\t%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					}
+
+				}
+
+			default:
+
+				fmt.Printf("[%s %s] \n", mStrava.FirstName, mStrava.LastName)
+				for _, m := range MemberSort(ml) {
+					fmt.Printf("\t%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				}
+
 			}
 
 		}
@@ -218,4 +292,26 @@ func main() {
 
 	os.Exit(0)
 
+}
+
+// Sorts a MemberSVTC slice by the Expired date field in descending order
+func MemberSort(ml []*MemberSVTC) []*MemberSVTC {
+
+	sort.Slice(ml, func(i, j int) bool {
+		return GetDate(ml[i].Expired).After(GetDate(ml[j].Expired))
+	})
+
+	return ml
+}
+
+// Convert a date string to a golang time.Time object. Returns the object or the zero time (0001-01-01 00:00:00 +0000 UTC) on error.
+// The zero time can be checked in the calling function via Time.IsZero()
+func GetDate(dstr string) time.Time {
+
+	t, err := time.Parse("1/2/06", dstr)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return t
 }
