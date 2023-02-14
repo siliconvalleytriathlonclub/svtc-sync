@@ -33,7 +33,7 @@ To support simplified cut and paste of email addresses into an email client, the
 
     Paula Newby-Frasure <queenofkona@gmail.com>,
 
-This option is only available in combination with the NA (not active) output option. FOr other output types it remains ignored.
+This option is only available in combination with the NA (not active) output option. For other output types it remains ignored.
 
 Usage information can be obtained via the flag -h or -help.
 

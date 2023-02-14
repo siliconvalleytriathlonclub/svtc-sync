@@ -340,14 +340,6 @@ func main() {
 
 	}
 
-	/*
-		err = Email("Alles Klar!")
-		if err != nil {
-			log.Printf("[Email] %s", err)
-			return
-		}
-	*/
-
 	os.Exit(0)
 
 }
@@ -388,30 +380,3 @@ func GetDate(dstr string) time.Time {
 	return t
 }
 
-// --------------------------------------------------------------------------------------------
-
-// Convert a date string to a golang time.Time object. Returns the object or the zero time (0001-01-01 00:00:00 +0000 UTC) on error.
-// The zero time can be checked in the calling function via Time.IsZero()
-func Email(msg string) error {
-
-	// Configuration
-	from := ""
-	password := ""
-	to := []string{""}
-	smtpHost := ""
-	smtpPort := ""
-
-	message := []byte(msg)
-
-	// Create authentication
-	auth := smtp.PlainAuth("", from, password, smtpHost)
-
-	// Send actual message
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
-}
