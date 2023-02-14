@@ -26,6 +26,8 @@ type SlackCreds struct {
 	Access_Token   string `json:"access_token"`   // Permanent Access Token
 }
 
+// ------------------------------------------------------------------------------------------------
+
 // Strava Athlete data structure is used to hold response data from the Strava List Club Members (getClubMembersById) API call
 // which returns an array of limited relevant Strava Athlete data.
 // Currently only first name and the initial of last name are returned.
@@ -60,6 +62,7 @@ type MemberSVTC struct {
 	Status    string `csv:"status"`    // Member status (Expired, Active, Dropped)
 	Joined    string `csv:"joined"`    // Date when joined M/D/YY
 	Expired   string `csv:"expired"`   // Date when expired / will expire M/D/YY
+	Num       int    `csv:"num"`       // Member number
 }
 
 // ------------------------------------------------------------------------------------------------

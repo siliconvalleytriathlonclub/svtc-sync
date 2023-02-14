@@ -4,7 +4,7 @@
 
 ## SYNOPSIS
 
-    svtc-sync [-h] [-out NF|NA|DUP] [-exp date] [-ref file] (strava|slack)
+    svtc-sync [-h] [-ref file] [-out NF|NA|DUP] [-exp date] [-email] (strava|slack)
 
 ## DESCRIPTION
 
@@ -29,6 +29,12 @@ Default behavior is to output all records that match .
 
 A user may optionally specify a date prior to which records should be ignored. This date is compared to the `Expired` date in the source file that reflects when a membership has either expired, been dropped or shall expire.
 
+To support simplified cut and paste of email addresses into an email client, the user may optionally specifiy the -email flag. This will output records in RFC 5322 conform format, e.g.
+
+    Paula Newby-Frasure <queenofkona@gmail.com>,
+
+This option is only available in combination with the NA (not active) output option. FOr other output types it remains ignored.
+
 Usage information can be obtained via the flag -h or -help.
 
 ## EXAMPLE USE
@@ -48,6 +54,10 @@ Output all member records from the default reference that match data coming from
 List all matching Strava records with an expired date after Jan-01-2020. List only non active members.
 
     svtc-sync -out NA -exp 1/1/20 strava
+
+List all non-active Slack users whose membership has expired after Jun-31-2021. Print in email client friendly format.
+
+    svtc-sync -out NA -exp 6/30/21 -email slack
 
 Get usage information (same as -h, --h or -help).
 

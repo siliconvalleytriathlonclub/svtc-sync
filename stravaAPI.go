@@ -6,17 +6,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 )
 
-type ClubAPIModel struct {
+type StravaAPIModel struct {
 	Client *http.Client
 	ClubID int
 }
 
 // --------------------------------------------------------------------------------------------
 
-func (m *ClubAPIModel) Club(access_token string) (*Club, error) {
+func (m *StravaAPIModel) Club(access_token string) (*Club, error) {
 
 	// https://www.strava.com/api/v3/clubs/{id}
 	url := "https://www.strava.com/api/v3/clubs/"
@@ -63,7 +65,7 @@ func (m *ClubAPIModel) Club(access_token string) (*Club, error) {
 
 // --------------------------------------------------------------------------------------------
 
-func (m *ClubAPIModel) AthleteList(count int, access_token string) ([]Athlete, error) {
+func (m *StravaAPIModel) AthleteList(count int, access_token string) ([]Athlete, error) {
 
 	// https://www.strava.com/api/v3/clubs/{id}/members
 	url := "https://www.strava.com/api/v3/clubs/"
@@ -108,5 +110,16 @@ func (m *ClubAPIModel) AthleteList(count int, access_token string) ([]Athlete, e
 	}
 
 	return al, nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Sorts Strava Athlete slice by the First name field in descending order
+func (m *StravaAPIModel) Sort(al []Athlete) {
+
+	sort.Slice(al, func(i, j int) bool {
+		return strings.ToLower(al[i].FirstName) < strings.ToLower(al[j].FirstName)
+	})
 
 }

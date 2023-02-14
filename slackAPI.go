@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
+	"strings"
 )
 
-type WorkspaceModel struct {
+type SlackAPIModel struct {
 	Client *http.Client
 }
 
 // --------------------------------------------------------------------------------------------
 
-func (m *WorkspaceModel) UserList(access_token string) ([]Member, error) {
+func (m *SlackAPIModel) UserList(access_token string) ([]Member, error) {
 
 	url := "https://slack.com/api/users.list"
 
@@ -55,3 +57,12 @@ func (m *WorkspaceModel) UserList(access_token string) ([]Member, error) {
 }
 
 // --------------------------------------------------------------------------------------------
+
+// Sorts a Slack Workspace User slice by the First Name field in descending order
+func (m *SlackAPIModel) Sort(ml []Member) {
+
+	sort.Slice(ml, func(i, j int) bool {
+		return strings.ToLower(ml[i].Profile.FirstName) < strings.ToLower(ml[j].Profile.FirstName)
+	})
+
+}
