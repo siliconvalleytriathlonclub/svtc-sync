@@ -47,19 +47,19 @@ Specify a reference member data file and validate Strava SVTC club athletes agai
 
     svtc-sync -ref /usr/local/etc/MemberData.csv strava
 
-Use the default reference member csv file and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed as not active.
+Use the default reference member csv file and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed with expired status.
 
     svtc-sync -out EXP slack
 
-Output all member records from the default reference that match data coming from Strava and yield duplicate matches. (Note: output format includes the platform record and all matches)
+Output all member records from the default reference that match data coming from Strava and yield duplicate matches. 
 
     svtc-sync -out DUP strava
 
-List all matching Strava records with an expired date after Jan-01-2020. List only non active members.
+List all matching Strava records with an expired date after Jan-01-2020. List only non expired members.
 
     svtc-sync -out EXP -exp 1/1/20 strava
 
-List all non-active Slack users whose membership has expired after Jun-31-2021. Print in email client friendly format.
+List all expired Slack users whose membership has expired after Jun-31-2021. Print in email client friendly format.
 
     svtc-sync -out EXP -exp 6/30/21 -email slack
 
