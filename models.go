@@ -54,15 +54,23 @@ type Club struct {
 // ------------------------------------------------------------------------------------------------
 
 type MemberSVTC struct {
-	ID        int    `csv:"-"`         // unused currently
-	FirstName string `csv:"firstname"` // First name of member
-	Middle    string `csv:"middle"`    // Middle initial or name
-	LastName  string `csv:"lastname"`  // Last name of member
-	Email     string `csv:"email"`     // Member Email
-	Status    string `csv:"status"`    // Member status (Expired, Active, Dropped)
-	Joined    string `csv:"joined"`    // Date when joined M/D/YY
-	Expired   string `csv:"expired"`   // Date when expired / will expire M/D/YY
-	Num       int    `csv:"num"`       // Member number
+	ID        int    `csv:"id"`        // sql: clubexpress_id INTEGER
+	Num       int    `csv:"num"`       // sql: num INTEGER
+	Active    bool   `csv:"active"`    // sql: active INTEGER
+	FirstName string `csv:"firstname"` // sql: firstname TEXT
+	Middle    string `csv:"middle"`    // sql: middle TEXT
+	LastName  string `csv:"lastname"`  // sql: lastname TEXT
+	Address   string `csv:"address"`   // sql: address TEXT
+	AddrExt   string `csv:"addr_ext"`  // sql: addr_ext TEXT
+	City      string `csv:"city"`      // sql: city TEXT
+	State     string `csv:"state"`     // sql: state TEXT
+	Zip       string `csv:"zip"`       // sql: zip INTEGER
+	Mobile    string `csv:"mobile"`    // sql: mobile TEXT
+	Phone     string `csv:"phone"`     // sql: phone TEXT
+	Email     string `csv:"email"`     // sql: email TEXT
+	Status    string `csv:"status"`    // sql: status TEXT
+	Joined    string `csv:"joined"`    // sql: joined TEXT
+	Expired   string `csv:"expired"`   // sql: expired TEXT
 }
 
 // ------------------------------------------------------------------------------------------------

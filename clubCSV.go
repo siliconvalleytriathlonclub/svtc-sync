@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/gocarina/gocsv"
@@ -39,55 +40,57 @@ func (m *ClubCSVModel) CheckMember(reference []*MemberSVTC, cfg config, source s
 
 	ml := []*MemberSVTC{}
 
-	switch source {
+	// Iterate over refrence data to apply filter criteria
+	for _, m := range reference {
 
-	case "slack":
-
-		// Assert type to Member for Slack workspace users
-		mSlack := data.(Member)
-
-		// Iterate over refrence data to apply filter criteria
-		for _, m := range reference {
-
-			// Match on either firstname and lastname or match on email matches
-			if (strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
-				strings.EqualFold(mSlack.Profile.LastName, m.LastName)) ||
-				strings.EqualFold(mSlack.Profile.Email, m.Email) {
-
-				// Ignore records with Expired dates preceeding config exp date spec
-				if GetDate(m.Expired).After(GetDate(cfg.expire)) {
-					ml = append(ml, m)
-				}
-
+		if cfg.output == "EXP" {
+			// Ignore records that are not expired status
+			if m.Status != "Expired" {
+				continue
 			}
-
+			if cfg.expire != "1/1/01" {
+				// Ignore records with expire dates preceeding config exp date
+				if GetDate(m.Expired).Before(GetDate(cfg.expire)) {
+					continue
+				}
+			}
 		}
 
-	case "strava":
+		switch source {
 
-		// Assert type to Athlete for Strava club members
-		mStrava := data.(Athlete)
+		case "slack":
 
-		// Iterate over refrence data to apply filter criteria
-		for _, m := range reference {
+			// Assert type to Member for Slack workspace users
+			mSlack := data.(Member)
+
+			// Match on either firstname and lastname or match on email
+			if !((strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
+				strings.EqualFold(mSlack.Profile.LastName, m.LastName)) ||
+				strings.EqualFold(mSlack.Profile.Email, m.Email)) {
+
+				continue
+			}
+
+		case "strava":
+
+			// Assert type to Athlete for Strava club members
+			mStrava := data.(Athlete)
 
 			// Trim leading or trailing white space from Strava names
 			// Match on firstname and first letter lastname
-			if strings.EqualFold(strings.TrimSpace(mStrava.FirstName), m.FirstName) &&
-				strings.EqualFold(strings.TrimSpace(string(mStrava.LastName[0])), string(m.LastName[0])) {
+			if !(strings.EqualFold(strings.TrimSpace(mStrava.FirstName), m.FirstName) &&
+				strings.EqualFold(strings.TrimSpace(string(mStrava.LastName[0])), string(m.LastName[0]))) {
 
-				// Ignore records with Expired dates preceeding config exp date spec
-				if GetDate(m.Expired).After(GetDate(cfg.expire)) {
-					ml = append(ml, m)
-				}
-
+				continue
 			}
 
 		}
 
+		ml = append(ml, m)
+
 	}
 
-	return ml
+	return m.Sort(ml, "exp")
 
 }
 
@@ -124,6 +127,28 @@ func (m *ClubCSVModel) Validate() ([]csv.ParseError, error) {
 
 	return ErrList, nil
 
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Sorts a MemberSVTC slice by the Expired date field in descending order
+func (m *ClubCSVModel) Sort(ml []*MemberSVTC, sortby string) []*MemberSVTC {
+
+	switch sortby {
+
+	case "exp":
+		sort.Slice(ml, func(i, j int) bool {
+			return GetDate(ml[i].Expired).After(GetDate(ml[j].Expired))
+		})
+
+	case "lname":
+		sort.Slice(ml, func(i, j int) bool {
+			return ml[i].LastName < ml[j].LastName
+		})
+
+	}
+
+	return ml
 }
 
 // --------------------------------------------------------------------------------------------

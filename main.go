@@ -6,28 +6,31 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/smtp"
 	"os"
-	"sort"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type config struct {
-	mfile        string // Master CSV file of current Club Members
-	source       string // Source data to check against master Member reference
-	output       string // NF (not Found), Active status, Duplucates or nil
-	expire       string // Date in the format M/D/YY to filter out earlier expire dates
-	email        bool   // Emails only formatted with delimiter
-	athleteid    int    // Strava user / athlete sctc-sync@svtriclub.org
-	clubid       int    // Strava Club Silicon Valley Triathlon Club
-	ucfilestrava string // Strava User API credentials JSON file
-	bcfileslack  string // Slack Bot API credentials JSON file
-	ccfile       string // Strava and Slack Client credentials JSON file
+	mfile         string // Master CSV file of current Club Members
+	dbfile        string // SQL database reference file
+	source        string // Source data to check against master Member reference
+	output        string // NF (not Found), Expired status, Duplicates or nil
+	expire        string // Date in the format M/D/YY to filter out earlier expire dates
+	email         bool   // Emails only formatted with delimiter
+	clubidexpress int    // ClubExpress Club ID for SVTC
+	athleteid     int    // Strava user / athlete svtc-sync@svtriclub.org
+	clubid        int    // Strava Club ID for Silicon Valley Triathlon Club
+	ucfilestrava  string // Strava User API credentials JSON file
+	bcfileslack   string // Slack Bot API credentials JSON file
+	ccfile        string // Strava and Slack Client credentials JSON file
 }
 
 type application struct {
 	creds   *CredsModel   // API Credentials
 	clubCSV *ClubCSVModel // ClubExpress CSV member refrence data
+	// clubSQL *ClubSQLModel // ClubExpress based SQL DB reference data
 	// clubAPI   *ClubAPIModel   // ClubExpress API member data
 	stravaAPI *StravaAPIModel // Strava Club API object
 	slackAPI  *SlackAPIModel  // Slack Web API workspace data
@@ -42,24 +45,24 @@ func main() {
 	// Assign user supplied reference file or use default
 	flag.StringVar(&cfg.mfile, "ref", "./ClubExpressMemberList.csv", "Reference CSV file of current Club Members")
 
-	// Filter output to show either Not Found (NF), Not Active (NA) or Duplicate (DUP)records only
-	flag.StringVar(&cfg.output, "out", "", "Output only Not Found or Not Active records")
+	// Filter output to show either Not Found (NF), Expired (EXP) or Duplicate (DUP)records only
+	flag.StringVar(&cfg.output, "out", "", "Apply output filters to show records of specific type")
 
 	// Ignore records with an Expire date field that is before this specified date
-	flag.StringVar(&cfg.expire, "exp", "1/1/01", "Ignore records with Expiration prior to this date")
+	flag.StringVar(&cfg.expire, "exp", "1/1/01", "Ignore records with an expiration prior to this date")
 
 	// Flag to output only emails of members in a format that is useful for c&p into an email client
-	flag.BoolVar(&cfg.email, "email", false, "Output only the email of matched members")
+	flag.BoolVar(&cfg.email, "email", false, "Output email client friendly records of matched members")
 
 	// Custom usage output, override standard flag.Usage function
 	flag.Usage = func() {
-		fmt.Printf("Usage: svtc-sync [-h] [-out NF|NA|DUP] [-exp date] [-email] [-ref file] (strava|slack|all) \n")
+		fmt.Printf("Usage: svtc-sync [-h] [-out NF|DUP|EXP] [-email] [-exp date] [-ref file] (strava|slack) \n")
 	}
 
 	flag.Parse()
 
 	// Check if output option is in the list of supported options, print usage info and exit if not
-	err := CheckArgs(&cfg.output, cfg.output, []string{"NF", "NA", "DUP", ""})
+	err := CheckArgs(&cfg.output, cfg.output, []string{"NF", "EXP", "DUP", ""})
 	if err != nil {
 		flag.Usage()
 		os.Exit(0)
@@ -69,11 +72,12 @@ func main() {
 	// Exit and print usage info if not.
 	if GetDate(cfg.expire).IsZero() {
 		flag.Usage()
+		// log.Printf("%v \n", cfg)
 		os.Exit(0)
 	}
 
 	// Assign last cli argument as operator to specify source of member data to validate.
-	// Exit and print usage inflo if not specified. Check if operator is in list of supported platforms,
+	// Exit and print usage info if not specified. Check if operator is in list of supported platforms,
 	// exit and print usage info if not
 	if len(os.Args) > 1 {
 		err := CheckArgs(&cfg.source, os.Args[len(os.Args)-1], []string{"strava", "slack"})
@@ -86,7 +90,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	cfg.athleteid = 112729399 // ID of Strava user under whish this app is registered
+	cfg.dbfile = "./svtc-sync.db" // sqlite3 database for reference data
+
+	cfg.clubidexpress = 325779 //SVTC Club ID for ClubExpress api requests
+
+	cfg.athleteid = 112729399 // ID of Strava user under who this app is registered
 	cfg.clubid = 449951       // Strava Club ID for SVTC
 
 	// Credential files for various APIs.
@@ -109,7 +117,22 @@ func main() {
 	}
 	defer file.Close()
 
-	// Create custom http client to implement timeout handling for TCP connec (Dial), TLS
+	//
+	// Open Sqlite3 DB file, generate handler and test connect. Exit on failure.
+	/*
+		db, err := sql.Open("sqlite3", cfg.dbfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = db.Ping()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
+	*/
+
+	//
+	// Create custom http client to implement timeout handling for TCP connect (Dial), TLS
 	// handshake and overall end-to-end connection duration.
 	netClient := &http.Client{
 		Transport: &http.Transport{
@@ -120,7 +143,7 @@ func main() {
 			}).Dial,
 			TLSHandshakeTimeout: 5 * time.Second,
 		},
-		Timeout: time.Second * 10,
+		Timeout: 10 * time.Second,
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -128,6 +151,7 @@ func main() {
 	app := application{
 		creds:   &CredsModel{Client: netClient},
 		clubCSV: &ClubCSVModel{File: file},
+		// clubSQL: &ClubSQLModel{DB: db},
 		// clubAPI   *ClubAPIModel{Client: netClient}
 		stravaAPI: &StravaAPIModel{Client: netClient, ClubID: cfg.clubid},
 		slackAPI:  &SlackAPIModel{Client: netClient},
@@ -212,37 +236,38 @@ func main() {
 					fmt.Printf("[%s %s (%s)] Not Found \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
 				}
 
-			case "NA":
-
-				// Print records that have a non-active status. When email flag is set, print in RFC 5322 format
-				for _, m := range MemberSort(ml, "exp") {
-					if m.Status != "Active" {
-						if cfg.email {
-							fmt.Printf("%s %s <%s>,\n", m.FirstName, m.LastName, m.Email)
-						} else {
-							fmt.Printf("%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
-						}
-					}
-				}
-
 			case "DUP":
 
 				if len(ml) > 1 {
-
 					// Print all records where there is more than one match, gouped by Slack User record
 					fmt.Printf("[%s %s (%s)] \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
-					for _, m := range MemberSort(ml, "exp") {
-						fmt.Printf("\t%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					for _, m := range ml {
+						fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 					}
+				}
 
+			case "EXP":
+
+				// Print records that have a non-active status. When email flag is set, print in RFC 5322 format
+				if len(ml) > 0 {
+					if !cfg.email {
+						fmt.Printf("[%s %s (%s)] \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
+					}
+					for _, m := range ml {
+						if cfg.email {
+							fmt.Printf("%s %s <%s>,\n", m.FirstName, m.LastName, m.Email)
+						} else {
+							fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+						}
+					}
 				}
 
 			default:
 
 				// Print all records (incl. duplicates and not found) grouped by Slack User record
 				fmt.Printf("[%s %s (%s)] \n", mSlack.Profile.FirstName, mSlack.Profile.LastName, mSlack.Profile.Email)
-				for _, m := range MemberSort(ml, "exp") {
-					fmt.Printf("\t%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				for _, m := range ml {
+					fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 				}
 
 			}
@@ -301,37 +326,38 @@ func main() {
 					fmt.Printf("[%s %s] Not Found \n", mStrava.FirstName, mStrava.LastName)
 				}
 
-			case "NA":
-
-				// Print records that have a non-active status. When email flag is set, print in RFC 5322 format
-				for _, m := range MemberSort(ml, "lname") {
-					if m.Status != "Active" {
-						if cfg.email {
-							fmt.Printf("%s %s <%s>,\n", m.FirstName, m.LastName, m.Email)
-						} else {
-							fmt.Printf("%s %s (%s) - %s [%s] \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
-						}
-					}
-				}
-
 			case "DUP":
 
 				if len(ml) > 1 {
-
 					// Print all records where there is more than one match, gouped by Strava Athlete record
 					fmt.Printf("[%s %s] \n", mStrava.FirstName, mStrava.LastName)
-					for _, m := range MemberSort(ml, "exp") {
-						fmt.Printf("\t%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+					for _, m := range ml {
+						fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 					}
+				}
 
+			case "EXP":
+
+				// Print records that have a expired status. When email flag is set, print in RFC 5322 format
+				if len(ml) > 0 {
+					if !cfg.email {
+						fmt.Printf("[%s %s] \n", mStrava.FirstName, mStrava.LastName)
+					}
+					for _, m := range ml {
+						if cfg.email {
+							fmt.Printf("%s %s <%s>,\n", m.FirstName, m.LastName, m.Email)
+						} else {
+							fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+						}
+					}
 				}
 
 			default:
 
 				// Print all records (incl. duplicates and not found) grouped by Strava Athlete record
 				fmt.Printf("[%s %s] \n", mStrava.FirstName, mStrava.LastName)
-				for _, m := range MemberSort(ml, "exp") {
-					fmt.Printf("\t%s %s (%s) - %s on %s \n", m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+				for _, m := range ml {
+					fmt.Printf("\t[%d] %s %s (%s) - %s [%s] \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
 				}
 
 			}
@@ -340,43 +366,16 @@ func main() {
 
 	}
 
+	/*
+		err = Email("Alles Klar!")
+		if err != nil {
+			log.Printf("[Email] %s", err)
+			return
+		}
+	*/
+
 	os.Exit(0)
 
 }
 
 // --------------------------------------------------------------------------------------------
-
-// Sorts a MemberSVTC slice by the Expired date field in descending order
-func MemberSort(ml []*MemberSVTC, sortby string) []*MemberSVTC {
-
-	switch sortby {
-
-	case "exp":
-		sort.Slice(ml, func(i, j int) bool {
-			return GetDate(ml[i].Expired).After(GetDate(ml[j].Expired))
-		})
-
-	case "lname":
-		sort.Slice(ml, func(i, j int) bool {
-			return ml[i].LastName < ml[j].LastName
-		})
-
-	}
-
-	return ml
-}
-
-// --------------------------------------------------------------------------------------------
-
-// Convert a date string to a golang time.Time object. Returns the object or the zero time (0001-01-01 00:00:00 +0000 UTC) on error.
-// The zero time can be checked in the calling function via Time.IsZero()
-func GetDate(dstr string) time.Time {
-
-	t, err := time.Parse("1/2/06", dstr)
-	if err != nil {
-		return time.Time{}
-	}
-
-	return t
-}
-
