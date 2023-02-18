@@ -55,7 +55,7 @@ Output all member records from the default reference that match data coming from
 
     svtc-sync -out DUP strava
 
-List all matching Strava records with an expired date after Jan-01-2020. List only non expired members.
+List all matching Strava records with an expired date after Jan-01-2020. List only expired members.
 
     svtc-sync -out EXP -exp 1/1/20 strava
 
