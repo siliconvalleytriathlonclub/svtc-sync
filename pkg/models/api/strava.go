@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -9,20 +9,27 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"svtc-sync/pkg/models"
 )
 
-type StravaAPIModel struct {
+type StravaAthleteModel struct {
 	Client *http.Client
-	ClubID int
 }
+
+const (
+	Athleteid    = 112729399 // ID of Strava user under who this app is registered
+	ClubIDstrava = 449951    // Strava Club ID for SVTC
+)
 
 // --------------------------------------------------------------------------------------------
 
-func (m *StravaAPIModel) Club(access_token string) (*Club, error) {
+// Function to query the Strava public Club API endpoint to obtain information on SVTC (based on the CLub ID)
+func (m *StravaAthleteModel) GetClub(access_token string) (*models.Club, error) {
 
 	// https://www.strava.com/api/v3/clubs/{id}
 	url := "https://www.strava.com/api/v3/clubs/"
-	url += strconv.Itoa(m.ClubID)
+	url += strconv.Itoa(ClubIDstrava)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -52,7 +59,7 @@ func (m *StravaAPIModel) Club(access_token string) (*Club, error) {
 		return nil, fmt.Errorf("non-200 response from strava api: %w", err)
 	}
 
-	club := &Club{}
+	club := &models.Club{}
 
 	err = json.Unmarshal(body, club)
 	if err != nil {
@@ -65,11 +72,14 @@ func (m *StravaAPIModel) Club(access_token string) (*Club, error) {
 
 // --------------------------------------------------------------------------------------------
 
-func (m *StravaAPIModel) AthleteList(count int, access_token string) ([]Athlete, error) {
+// Function to query the Strava public Club API endpoint to obtain a list of athletes affilated
+// with SVTC (based on the CLub ID). The number of records to query is based on the number of members
+// returned by the GetClub function.
+func (m *StravaAthleteModel) List(count int, access_token string) ([]models.Athlete, error) {
 
 	// https://www.strava.com/api/v3/clubs/{id}/members
 	url := "https://www.strava.com/api/v3/clubs/"
-	url += strconv.Itoa(m.ClubID)
+	url += strconv.Itoa(ClubIDstrava)
 	url += "/members"
 	url += "?page=1"
 	url += "&per_page=" + strconv.Itoa(count)
@@ -102,7 +112,7 @@ func (m *StravaAPIModel) AthleteList(count int, access_token string) ([]Athlete,
 		return nil, fmt.Errorf("non-200 response from Strava api: %w", err)
 	}
 
-	al := []Athlete{}
+	al := []models.Athlete{}
 
 	err = json.Unmarshal(body, &al)
 	if err != nil {
@@ -116,7 +126,7 @@ func (m *StravaAPIModel) AthleteList(count int, access_token string) ([]Athlete,
 // --------------------------------------------------------------------------------------------
 
 // Sorts Strava Athlete slice by the First name field in descending order
-func (m *StravaAPIModel) Sort(al []Athlete) {
+func (m *StravaAthleteModel) Sort(al []models.Athlete) {
 
 	sort.Slice(al, func(i, j int) bool {
 		return strings.ToLower(al[i].FirstName) < strings.ToLower(al[j].FirstName)

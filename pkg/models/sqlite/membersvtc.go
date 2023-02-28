@@ -1,4 +1,4 @@
-package main
+package sqlite
 
 import (
 	"database/sql"
@@ -6,28 +6,23 @@ import (
 	"fmt"
 	"strings"
 
+	"svtc-sync/pkg/models"
+
 	"github.com/mattn/go-sqlite3"
 )
 
-type ClubSQLModel struct {
+type MemberModel struct {
 	DB *sql.DB
 }
 
 // --------------------------------------------------------------------------------------------
-//
-// Test run to insert all records read from refernce CSV into local Sqlite3 DB
-/*
-	for _, m := range mlCSV {
-		err = app.clubSQL.Insert(m)
-		if err != nil {
-			log.Printf("[Insert] %s", err)
-		}
-	}
-	log.Printf("[main] TEST Insert all records read from CSV into local Sqlite3 DB")
-*/
-//
 
-func (m *ClubSQLModel) Insert(member *MemberSVTC) error {
+// Function to add a member record to the database, returns errors on failure to process query, unique field constrain violations
+// or other db query failures. Particulars on data formats are
+//   - removal of apostrophes (') in names e.g. "O'Connor"
+//   - date fileds (joined, expired) are expected to be "YYYY-=MM-DD"
+//   - an active flag is used to indicate invalid records (set to false / "0")
+func (m *MemberModel) Insert(member *models.MemberSVTC) error {
 
 	// Convert bool to int for sqlite3
 	var flag int64
@@ -36,10 +31,11 @@ func (m *ClubSQLModel) Insert(member *MemberSVTC) error {
 	}
 
 	query := "INSERT INTO member "
-	query += "(num, active, firstname, middle, lastname, email, status, joined, expired, address, addr_ext, phone, mobile, city, state, zip) "
+	query += "(num, active, login, firstname, middle, lastname, email, status, joined, expired, address, addr_ext, phone, mobile, city, state, zip) "
 	query += "VALUES ("
-	query += fmt.Sprintf("%d, ", member.Num)
+	query += fmt.Sprintf("'%s', ", member.Num)
 	query += fmt.Sprintf("%d, ", flag)
+	query += fmt.Sprintf("'%s', ", member.Login)
 	query += fmt.Sprintf("'%s', ", member.FirstName)
 	query += fmt.Sprintf("'%s', ", member.Middle)
 	query += fmt.Sprintf("'%s', ", strings.ReplaceAll(member.LastName, "'", "''"))
@@ -69,9 +65,9 @@ func (m *ClubSQLModel) Insert(member *MemberSVTC) error {
 		// For reference https://github.com/mattn/go-sqlite3/blob/master/error.go
 		sqliteErr := err.(sqlite3.Error)
 		if sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
-			return fmt.Errorf("insert goal failed: %w", errors.New("duplicate member"))
+			return fmt.Errorf("insert member failed: %w", errors.New("duplicate member"))
 		} else {
-			return fmt.Errorf("insert goal failed: %w", err)
+			return fmt.Errorf("insert member failed: %w", err)
 		}
 	}
 
@@ -79,46 +75,39 @@ func (m *ClubSQLModel) Insert(member *MemberSVTC) error {
 	if err != nil {
 		return fmt.Errorf("could not get last inserted id: %w", err)
 	}
-	// log.Printf("[insert] Added member [%d] with ID: %d \n", member.Num, lastid)
-
-	// fmt.Printf("%s \n", query)
 
 	return nil
 }
 
 // --------------------------------------------------------------------------------------------
-//
-// Get list of members from Sqlite3 DB
-/*
-	mlSQL, err := app.clubSQL.MemberList()
-	if err != nil {
-		log.Printf("[ListMembers] %s", err)
-		return
-	}
-	log.Printf("[main] Read list of %d club members from %s", len(mlSQL), cfg.dbfile)
-*/
-//
 
-func (m *ClubSQLModel) MemberList() ([]*MemberSVTC, error) {
+// Function to query and return a list of valid members. Based on the specified expire date string
+// members will be filtered by status and expire date.
+func (m *MemberModel) List(expire string) ([]*models.MemberSVTC, error) {
 
 	query := "SELECT num, firstname, lastname, email, status, expired "
 	query += "FROM member "
-	query += "WHERE lastname = ?"
+	query += "WHERE active = ? "
+
+	if expire != "1963-11-04" {
+		query += "AND status = ? "
+		query += "AND expired > ? "
+	}
 
 	// fmt.Printf("%s \n", query)
 
-	rows, err := m.DB.Query(query, "Apitz")
+	rows, err := m.DB.Query(query, 1, "Expired", expire)
 	if err != nil {
 		return nil, fmt.Errorf("sql query failed: %w", err)
 	}
 	defer rows.Close()
 
 	// memberList := make([]MemberSVTC, 0)
-	memberList := []*MemberSVTC{}
+	memberList := []*models.MemberSVTC{}
 
 	for rows.Next() {
 		// Create a pointer to a new struct.
-		member := &MemberSVTC{}
+		member := &models.MemberSVTC{}
 
 		err = rows.Scan(
 			&member.Num,
@@ -150,19 +139,11 @@ func (m *ClubSQLModel) MemberList() ([]*MemberSVTC, error) {
 }
 
 // --------------------------------------------------------------------------------------------
-//
-/*
-	mSQL, err := app.clubSQL.Get(m.Num)
-	if err != nil {
-		log.Printf("[GetMember] %s", err)
-		return
-	}
-	fmt.Printf("\tSQL: [%d] %s %s (%s) - %s [%s] \n", mSQL.Num, mSQL.FirstName, mSQL.LastName, mSQL.Email, mSQL.Status, mSQL.Expired)
-*/
-//
-func (m *ClubSQLModel) Get(num int) (*MemberSVTC, error) {
 
-	member := &MemberSVTC{}
+// Function to retrieve a single member record based on their member number
+func (m *MemberModel) Get(num string) (*models.MemberSVTC, error) {
+
+	member := &models.MemberSVTC{}
 
 	query := "SELECT num, firstname, lastname, email, status, expired "
 	query += "FROM member "
@@ -178,7 +159,7 @@ func (m *ClubSQLModel) Get(num int) (*MemberSVTC, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("member sql query failed: %w", errors.New("no matching record found"))
+			return nil, err
 		} else {
 			return nil, fmt.Errorf("member sql query failed: %w", err)
 		}
@@ -186,6 +167,37 @@ func (m *ClubSQLModel) Get(num int) (*MemberSVTC, error) {
 
 	return member, nil
 
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Function to update a member's status based on their member number
+func (m *MemberModel) UpdateStatus(num, status, expired string) error {
+
+	query := "UPDATE member SET status = ?, expired = ? WHERE num = ?"
+
+	stmt, err := m.DB.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("prepare sql query failed: %w", err)
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(status, expired, num)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("sql query failed for %s: %w", num, errors.New("no matching record found"))
+		} else {
+			return fmt.Errorf("sql query failed for %s: %w", num, err)
+		}
+	}
+
+	// sql.ErrNoRows does not work here. Evaluate result.RowsAffected() instead.
+	_, err = result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("could not get rows affected: %w", err)
+	}
+
+	return nil
 }
 
 // --------------------------------------------------------------------------------------------

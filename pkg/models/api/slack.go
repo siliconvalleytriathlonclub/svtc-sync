@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -8,15 +8,18 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"svtc-sync/pkg/models"
 )
 
-type SlackAPIModel struct {
+type SlackMemberModel struct {
 	Client *http.Client
 }
 
 // --------------------------------------------------------------------------------------------
 
-func (m *SlackAPIModel) UserList(access_token string) ([]Member, error) {
+// Function to query the SLack Web API and list all users / members in the SVTC workspace.
+func (m *SlackMemberModel) List(access_token string) ([]models.Member, error) {
 
 	url := "https://slack.com/api/users.list"
 
@@ -39,7 +42,7 @@ func (m *SlackAPIModel) UserList(access_token string) ([]Member, error) {
 		return nil, fmt.Errorf("unable to read result of call to Slack web api: %w", err)
 	}
 
-	response := ResponseMember{}
+	response := models.ResponseMember{}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -59,7 +62,7 @@ func (m *SlackAPIModel) UserList(access_token string) ([]Member, error) {
 // --------------------------------------------------------------------------------------------
 
 // Sorts a Slack Workspace User slice by the First Name field in descending order
-func (m *SlackAPIModel) Sort(ml []Member) {
+func (m *SlackMemberModel) Sort(ml []models.Member) {
 
 	sort.Slice(ml, func(i, j int) bool {
 		return strings.ToLower(ml[i].Profile.FirstName) < strings.ToLower(ml[j].Profile.FirstName)

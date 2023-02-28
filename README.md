@@ -4,34 +4,38 @@
 
 ## SYNOPSIS
 
-    svtc-sync [-h] [-ref file] [-out NF|DUP|EXP] [-exp date] [-email] (strava|slack)
+    svtc-sync [-h]
+    svtc-sync [-db file] -actives [-raw] [-pre]
+    svtc-sync [-db file] [-out NF|DUP] (strava|slack)
+    svtc-sync [-db file] [-out EXP] [-exp date] [-email] (strava|slack)
 
 ## DESCRIPTION
 
-SVTC has a need to periodically check which individuals that are not paying club members might be subscribed or affilated with various platforms the club uses to provide member benefits. 
-Such individuals should be identified and contacted to remind them of opportunities to become members. 
+SVTC has a need to periodically check which individuals that are not paying club members might be subscribed or affilated with various platforms the club uses to provide member benefits. Such individuals should be identified and contacted to remind them of opportunities to become members. 
 
-This cli tool will use public APIs of platforms such as Strava and Slack to fetch lists of users affiliated with SVTC and compare their user data to a reference file provided by the ClubExpress management platform. The data of this platform is regarded to be the source of truth for membership data, such as contact information and status.
+This cli tool will use public APIs of platforms such as Strava and Slack to fetch lists of users affiliated with SVTC and compare their user data to a reference data set provided by the ClubExpress management platform and maintained locally as a Sqlite3 DB. The data of this platform is regarded to be the source of truth for membership data, such as contact information and status.
 
-svtc-sync will take the reference file as an optional parameter. The default is `ClubExpressMemberList.csv` in the current working directory. This file is expected to be a valid comma separated value (CSV) format file with a header in the form of:
+svtc-sync will take the database file as an optinoal parameter. The default is `svtc-sync.db` in the current working directory. (Note: the DB is seeded via a csv export from ClubExpress in a process that is outside the scope of this tool)
 
-    firstname,middle,lastname,email,status,expiration
-    Dave,TheMan,Scott,dave@gmail.com,Expired,12/31/22
+There are two major functional areas in the tool:
 
-The listed fields represent the minimum required fields, but may contain more. The order of header/fields does not matter.
+- Check Members - Compare source member data to reference and display results in specific output formats
+- Sync Actives - Retrieve new data on active members from the ClubExpress platform and update the DB
 
-Validation of the specified CSV file is performed prior to further processing and returns a list of parsing errors if encountered and will exit.
+Usage information can be obtained via the flag -h or -help.
+
+### Check Members
 
 The tool will take a mandatory argument specifying the platform to verify users for. Currently values can be either "strava" or "slack".
 
-Optionally, an output filter may be applied to specify whether to only show Expired (EXP), Not Found (NF) or Duplicate (DUP) records. Default behavior is to output all records that match.
+Optionally, an output specifier may be applied to only show Expired (EXP), Not Found (NF) or Duplicate (DUP) records. Default behavior is to output all source records and the ones that match.
 
-When the EXP output is used, a user may optionally specify a date prior to which records should be ignored. This date is compared to the `Expired` date in the source file that reflects when a membership has either expired or shall expire. The date remains ignored for other output options.
-
-The tool will generate an aphabetically ordered list of matched reference records (multiple if applicable) in the following format; - unless the -email option is specified (see below).
+The tool will generate an aphabetically ordered list of `matched` reference records (multiple if applicable) in the following format; - unless the -email option is specified (see below).
 
     [source record]
         [num] name (email) - status [expired date]
+
+A user may optionally specify a date via the -exp flag, in the (ISO 8601) form `YYYY-MM-DD`,  prior to which records should be ignored. This date is compared to the `Expired` date in the reference data, that reflects when a membership has either expired or shall expire. The date remains ignored .
 
 To support simplified cut and paste of email addresses into an email client, the user may optionally specifiy the -email flag. This will output records in RFC 5322 conform format, e.g.
 
@@ -39,15 +43,25 @@ To support simplified cut and paste of email addresses into an email client, the
 
 This option is only available in combination with the EXP (Expired) output option. For other output types it remains ignored.
 
-Usage information can be obtained via the flag -h or -help.
+### Sync Actives
+
+ClubExpress regularly posts an updated export of `active` member data that may be retrieve via a defined URL. The svtc-sync tool will retrieve and process this JSON format file to update the current state of active members in the reference DB. The function to persist updated records can be invoked via the command flag `-actives`.
+
+In order to preview the updates of active records WITHOUT comitting them to the DB, it is recommended to run the `-pre` flag option and review results prior to writing to the DB. The preview option will produce out put as follows.
+
+    [num] name (old status) -> (new status) new exp date
+
+With `old status` coming from the DB and `new status` from the JSON file. The `new exp date` will be set to the last day of the currebt year.
+
+Optionally, to test the validity of the of the JSON file, a raw dump of the http header and query result set in JSON format can be output via the `-raw` flag.
 
 ## EXAMPLE USE
 
-Specify a reference member data file and validate Strava SVTC club athletes against it.
+Specify a reference Sqlite3 member data DB file and check Strava SVTC club athletes against it.
 
-    svtc-sync -ref /usr/local/etc/MemberData.csv strava
+    svtc-sync -db /usr/local/etc/data.db strava
 
-Use the default reference member csv file and validate Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, but are listed with expired status.
+Use the default reference member DB and check Slack SVTC workspace users against it. Output all Slack users that are found in the reference file, listed with `Expired` status.
 
     svtc-sync -out EXP slack
 
@@ -55,13 +69,25 @@ Output all member records from the default reference that match data coming from
 
     svtc-sync -out DUP strava
 
-List all matching Strava records with an expired date after Jan-01-2020. List only expired members.
+List only matching Strava records with with status `Expired` and an expired date after Jan-01-2020.
 
-    svtc-sync -out EXP -exp 1/1/20 strava
+    svtc-sync -out EXP -exp 2020-01-01 strava
 
-List all expired Slack users whose membership has expired after Jun-31-2021. Print in email client friendly format.
+List all expired Slack users whose membership has expired after Jun-30-2021. Print in email client friendly format.
 
-    svtc-sync -out EXP -exp 6/30/21 -email slack
+    svtc-sync -out EXP -exp 2021-06-30 -email slack
+
+Preview updates on `Active` members coming from the ClubExpress JSON export file WITHOUT writing to DB
+
+    svtc-sync -actives -pre
+
+Commit updated active member records to DB
+
+    svtc-sync -actives
+
+Dump the entire JSON update file on active members as it is received vie http
+
+    svtc-sync -actives -raw
 
 Get usage information (same as -h, --h or -help).
 

@@ -1,8 +1,7 @@
-package main
+package helpers
 
 import (
 	"fmt"
-	"net/smtp"
 	"time"
 )
 
@@ -28,7 +27,7 @@ func CheckArgs(argVar *string, argVal string, optionList []string) error {
 // The zero time can be checked in the calling function via Time.IsZero()
 func GetDate(dstr string) time.Time {
 
-	const layout = "1/2/06"
+	const layout = "2006-01-02"
 
 	t, err := time.Parse(layout, dstr)
 	if err != nil {
@@ -36,30 +35,4 @@ func GetDate(dstr string) time.Time {
 	}
 
 	return t
-}
-
-// --------------------------------------------------------------------------------------------
-
-func Email(msg string) error {
-
-	// Configuration
-	from := ""
-	password := ""
-	to := []string{""}
-	smtpHost := ""
-	smtpPort := ""
-
-	message := []byte(msg)
-
-	// Create authentication
-	auth := smtp.PlainAuth("", from, password, smtpHost)
-
-	// Send actual message
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
 }
