@@ -91,8 +91,12 @@ func (app *Application) ActivesSync() error {
 
 	// Log output type and format as appropriate
 	if app.Config.Preview {
-		app.InfoLog.Printf("[ActivesSync] Preview flag set: NOT making changes to DB \n\n")
+		app.InfoLog.Printf("[ActivesSync] Preview flag set: NOT making changes to DB \n")
 	}
+
+	// Get last day of the year to be used for new and updated active member expired date
+	dstr := helpers.GetLastDateStr()
+	app.InfoLog.Printf("[ActivesSync] Expired dates will be set to last day of this year \n\n")
 
 	for _, m := range mlJSON {
 
@@ -108,14 +112,14 @@ func (app *Application) ActivesSync() error {
 			}
 		}
 
-		// Insert New member record with Ststus Active and end of year as expired date
+		// Insert New member record with Status Active and end of year as expired date
 		if mSQL.Status == "New" {
 
 			if app.Config.Preview {
-				fmt.Printf("[%s] %s %s (New) -> (Active) 2023-12-31 \n", m.Num, m.FirstName, m.LastName)
+				fmt.Printf("[%s] %s %s (New) -> (Active) %s \n", m.Num, m.FirstName, m.LastName, dstr)
 			} else {
 				m.Status = "Active"
-				m.Expired = "2023-12-31"
+				m.Expired = dstr
 				err = app.MemberSQL.Insert(m)
 				if err != nil {
 					app.ErrorLog.Printf("[Insert] %s", err)
@@ -131,9 +135,9 @@ func (app *Application) ActivesSync() error {
 		if mSQL.Status != "Active" {
 
 			if app.Config.Preview {
-				fmt.Printf("[%s] %s %s (%s) -> (Active) 2023-12-31 \n", m.Num, m.FirstName, m.LastName, mSQL.Status)
+				fmt.Printf("[%s] %s %s (%s) -> (Active) %s \n", m.Num, m.FirstName, m.LastName, mSQL.Status, dstr)
 			} else {
-				err = app.MemberSQL.UpdateStatus(m.Num, "Active", "2023-12-31")
+				err = app.MemberSQL.UpdateStatus(m.Num, "Active", dstr)
 				if err != nil {
 					app.ErrorLog.Printf("[UpdateStatus] %s", err)
 					continue

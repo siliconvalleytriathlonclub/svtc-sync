@@ -36,3 +36,17 @@ func GetDate(dstr string) time.Time {
 
 	return t
 }
+
+// --------------------------------------------------------------------------------------------
+
+// Get the last day of the year for the current year and local timezone and return date string
+func GetLastDateStr() string {
+
+	const layout = "2006-01-02"
+
+	lt := time.Now().Local() // Get current local time for tz (location) and year
+
+	t := time.Date(lt.Year(), time.December, 31, 0, 0, 0, 0, lt.Location())
+
+	return t.Format(layout)
+}

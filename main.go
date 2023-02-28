@@ -153,8 +153,8 @@ func main() {
 
 		} else {
 
-			// Function call to sync an update of active members from the CLubExpress JSON file with the
-			// local Sqlite3 reference database. ActiveSync can be done directly or in preview mode dependant on
+			// Function call to sync an update of active members from the ClubExpress JSON file with the
+			// local Sqlite3 reference database. ActiveSync can be done directly or in preview mode dependent on
 			// selected configuration flags
 			err := svtc_sync.ActivesSync()
 			if err != nil {
@@ -170,9 +170,9 @@ func main() {
 
 	// --------------------------------------------------------------------------------------------
 
-	// Depending on the selected source, check members against the current referene Sqlite3 database and
-	// output reults in a format that is determined by configuration flags and options.
-	// Each source function applies match criteria and output data based onwhat is available ivia its public APIs.
+	// Depending on the selected source, check members against the current reference Sqlite3 database and
+	// output results in a format that is determined by configuration flags and options.
+	// Each source function applies match criteria and output data based on what is available via its public APIs.
 	switch cfg.Source {
 
 	case "slack":
