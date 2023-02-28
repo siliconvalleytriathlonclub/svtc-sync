@@ -11,7 +11,7 @@
 
 ## DESCRIPTION
 
-SVTC has a need to periodically check which individuals that are not paying club members might be subscribed or affilated with various platforms the club uses to provide member benefits. Such individuals should be identified and contacted to remind them of opportunities to become members. 
+SVTC has a need to periodically check which individuals, that are not paying club members, might be subscribed or affilated with various platforms the club uses to provide member benefits. Such individuals should be identified and contacted to remind them of opportunities to become members. 
 
 This cli tool will use public APIs of platforms such as Strava and Slack to fetch lists of users affiliated with SVTC and compare their user data to a reference data set provided by the ClubExpress management platform and maintained locally as a Sqlite3 DB. The data of this platform is regarded to be the source of truth for membership data, such as contact information and status.
 
@@ -28,7 +28,7 @@ Usage information can be obtained via the flag -h or -help.
 
 The tool will take a mandatory argument specifying the platform to verify users for. Currently values can be either "strava" or "slack".
 
-It will generate an aphabetically ordered list of `matched` reference records (multiple if applicable) in the following format; - unless the -email option is specified (see below).
+It will generate an aphabetically ordered list of `matched` reference records (multiple if applicable) in the following format - unless the -email option is specified (see below).
 
     [source record]
         [num] name (email) - status [expired date]
