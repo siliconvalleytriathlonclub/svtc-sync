@@ -85,7 +85,7 @@ Commit updated active member records to DB
 
     svtc-sync -actives
 
-Dump the entire JSON update file on active members as it is received vie http
+Dump the entire JSON update file on active members as it is received via http
 
     svtc-sync -actives -raw
 

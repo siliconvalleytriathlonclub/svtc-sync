@@ -7,3 +7,6 @@
 # Ignore member data files
 ClubExpressMemberList.csv
 svtc-sync.db
+
+# Ignore this file
+.gitignore
