@@ -37,7 +37,7 @@ type ExpressCreds struct {
 
 // Strava Athlete data structure is used to hold response data from the Strava List Club Members (getClubMembersById) API call
 // which returns an array of limited relevant Strava Athlete data.
-// Currently only first name and the initial of last name are returned (among other data that is not used here).
+// Currently only first name and the initial of last name are needed (among other data that is not used here).
 type Athlete struct {
 	FirstName string `json:"firstname"`
 	LastName  string `json:"lastname"`
@@ -45,27 +45,26 @@ type Athlete struct {
 
 // Strava Club data structure is used to hold response data from the Strava Get Club (getClubById) API call
 // which returns a DetailedClub object.
+// Note only a subset of retiurned data is used/needed for this application
 type Club struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
-	City        string `json:"city"`
-	State       string `json:"state"`
-	Country     string `json:"country"`
-	Private     bool   `json:"private"`
 	MemberCount int    `json:"member_count"`
-	URL         string `json:"url"`
-	Admin       bool   `json:"admin"`
-	Description string `jason:"description"`
 }
 
 // ------------------------------------------------------------------------------------------------
 
+var StatusMap = map[string]string{
+	"EXP": "Expired",
+	"ACT": "Active",
+	"TRI": "Trial",
+}
+
 // Core member structure, modeled after the ClubExpress csv export and JSON active member file. It is mainly used
 // to create unique queries for lookup and match purposes. Non relevant fields for the time being are address and
-// phone related; they are stored on new record inster, but remain unused.
+// phone related; they are stored on new record insert, but remain unused.
 type MemberSVTC struct {
 	ID        int    `json:"id"`            // sql: id INTEGER
-	MemberID  string `json:"profileLink"`   // sql: clubexpress_id INTEGER
 	Num       string `json:"memberNumber"`  // sql: num INTEGER
 	Active    bool   `json:"active"`        // sql: active INTEGER
 	Login     string `json:"loginName"`     // sql: login TEXT
@@ -83,11 +82,22 @@ type MemberSVTC struct {
 	Zip       string `json:"zip"`           // sql: zip INTEGER
 	Mobile    string `json:"cellPhone"`     // sql: mobile TEXT
 	Phone     string `json:"phone"`         // sql: phone TEXT
+	// MemberID  string `json:"profileLink"`   // sql: clubexpress_id INTEGER
+}
+
+// Structure to support the use and mapping of name aliases for SVTC Members
+// Aliases can be specified for First- Lastname and Email and are tied to a specific Member ID
+type MemberAlias struct {
+	ID        int    // sql: id
+	MemberID  int    // sql: member_id INTEGER
+	FirstName string // sql: firstname TEXT
+	LastName  string // sql: lastname TEXT
+	Email     string // sq;: email TEXT
 }
 
 // ------------------------------------------------------------------------------------------------
 
-// Slack Workspace Member / User data structure as returned by the user.list request to their web api.
+// Slack Workspace Member / User data structures as returned by the user.list request to their web api.
 // These fields represent a subset of the data returned, as required for this application.
 type ResponseMember struct {
 	Ok      bool     `json:"ok"`

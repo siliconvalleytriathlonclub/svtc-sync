@@ -28,7 +28,7 @@ func main() {
 	// Specify user supplied reference Sqlite3 DB file or use default
 	flag.StringVar(&cfg.DBfile, "db", "./svtc-sync.db", "Reference sqlite3 DB file of past and current club members")
 
-	// Filter output to show either Not Found (NF), Expired (EXP) or Duplicate (DUP)records only
+	// Filter output to show either based on Status (EXP, ACT, TRI) or Not Found (NF) or Duplicate (DUP)records only
 	flag.StringVar(&cfg.Output, "out", "", "Apply output filters to show records of specific type")
 
 	// Ignore records with an Expire date field that is before this specified date
@@ -51,8 +51,9 @@ func main() {
 		fmt.Printf("Usage: \n")
 		fmt.Printf("  svtc-sync -h \n")
 		fmt.Printf("  svtc-sync [-db file] -actives [-raw] [-pre] \n")
+		fmt.Printf("  svtc-sync [-db file] (ref|alias) \n")
 		fmt.Printf("  svtc-sync [-db file] [-out NF|DUP] (strava|slack) \n")
-		fmt.Printf("  svtc-sync [-db file] [-out EXP] [-exp date] [-email] (strava|slack) \n")
+		fmt.Printf("  svtc-sync [-db file] [-out EXP|ACT|TRI] [-exp date] [-email] (strava|slack) \n")
 	}
 
 	flag.Parse()
@@ -61,7 +62,7 @@ func main() {
 	errorLog := log.New(os.Stderr, "ERROR ", log.Ldate|log.Ltime)
 
 	// Check if output option is in the list of supported options, print usage info and exit if not
-	err := helpers.CheckArgs(&cfg.Output, cfg.Output, []string{"NF", "EXP", "DUP", ""})
+	err := helpers.CheckArgs(&cfg.Output, cfg.Output, []string{"NF", "DUP", "EXP", "TRI", "ACT", ""})
 	if err != nil {
 		flag.Usage()
 		os.Exit(0)
@@ -75,11 +76,11 @@ func main() {
 	}
 
 	// Assign last cli argument as operator to specify source of member data to validate (unless it is to update actives)
-	// Exit and print usage info if not specified. Check if operator is in list of supported platforms,
-	// exit and print usage info if not
+	// Exit and print usage info if not specified.
+	// Check if operator is in list of supported platforms,exit and print usage info if not
 	if len(os.Args) > 1 {
 		if !cfg.Actives {
-			err := helpers.CheckArgs(&cfg.Source, os.Args[len(os.Args)-1], []string{"strava", "slack"})
+			err := helpers.CheckArgs(&cfg.Source, os.Args[len(os.Args)-1], []string{"strava", "slack", "alias", "ref"})
 			if err != nil {
 				flag.Usage()
 				os.Exit(0)
@@ -145,9 +146,10 @@ func main() {
 		if cfg.Raw {
 
 			// Retrieve JSON file from the ClubExpress API. Output header and data as is.
+
 			err := svtc_sync.ActivesRaw()
 			if err != nil {
-				svtc_sync.ErrorLog.Printf("[ActivesRaw] cannot update active records from ClubExpress API: %s", err)
+				svtc_sync.ErrorLog.Printf("[ActivesRaw] cannot retrieve active records from ClubExpress API: %s", err)
 				os.Exit(1)
 			}
 
@@ -156,6 +158,7 @@ func main() {
 			// Function call to sync an update of active members from the ClubExpress JSON file with the
 			// local Sqlite3 reference database. ActiveSync can be done directly or in preview mode dependent on
 			// selected configuration flags
+
 			err := svtc_sync.ActivesSync()
 			if err != nil {
 				svtc_sync.ErrorLog.Printf("[ActivesSync] unable to sync active records from ClubExpress API to DB: %s", err)
@@ -170,24 +173,49 @@ func main() {
 
 	// --------------------------------------------------------------------------------------------
 
-	// Depending on the selected source, check members against the current reference Sqlite3 database and
-	// output results in a format that is determined by configuration flags and options.
-	// Each source function applies match criteria and output data based on what is available via its public APIs.
 	switch cfg.Source {
 
 	case "slack":
 
+		// Check Slack workspace users against the current reference Sqlite3 database and
+		// output results in a format that is determined by configuration flags and options.
+
 		err = svtc_sync.CheckSlackMembers()
 		if err != nil {
-			svtc_sync.ErrorLog.Printf("cannot check Slack members against DB: %s", err)
+			svtc_sync.ErrorLog.Printf("[CheckSlackMembers] cannot check Slack members against DB: %s", err)
 			os.Exit(1)
 		}
 
 	case "strava":
 
+		// Check Strava athletes against the current reference Sqlite3 database and
+		// output results in a format that is determined by configuration flags and options.
+
 		err = svtc_sync.CheckStravaMembers()
 		if err != nil {
-			svtc_sync.ErrorLog.Printf("cannot check Strava members against DB: %s", err)
+			svtc_sync.ErrorLog.Printf("[CheckStravaMembers] cannot check Strava members against DB: %s", err)
+			os.Exit(1)
+		}
+
+	case "alias":
+
+		// Output all records from the alias table with mappings to their member records. Multiple aliases may
+		// exist that point to the same member record.
+
+		err := svtc_sync.ListAlias()
+		if err != nil {
+			svtc_sync.ErrorLog.Printf("[ListAlias] unable to list alias records from Reference DB: %s", err)
+			os.Exit(1)
+		}
+
+	case "ref":
+
+		// Output of all valid members, ie with an active flag set.
+		// Can be useful on cmd line to pipe for further processing using grep, awk, etc.
+
+		err := svtc_sync.ListMembers()
+		if err != nil {
+			svtc_sync.ErrorLog.Printf("[ListMembers] unable to list member records from Reference DB: %s", err)
 			os.Exit(1)
 		}
 

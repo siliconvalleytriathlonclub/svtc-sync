@@ -17,14 +17,13 @@ type MemberModel struct {
 
 // --------------------------------------------------------------------------------------------
 
-// Function to add a member record to the database, returns errors on failure to process query, unique field constrain violations
+// Function to add a member record to the database, returns errors on failure to process query, unique field constraint violations
 // or other db query failures. Particulars on data formats are
-//   - removal of apostrophes (') in names e.g. "O'Connor"
-//   - date fileds (joined, expired) are expected to be "YYYY-=MM-DD"
+//   - escape apostrophes (') in names e.g. "O'Connor"
+//   - date fileds (joined, expired) are expected to be "YYYY-MM-DD"
 //   - an active flag is used to indicate invalid records (set to false / "0")
 func (m *MemberModel) Insert(member *models.MemberSVTC) error {
 
-	// Convert bool to int for sqlite3
 	var flag int64
 	if member.Active {
 		flag = 1
@@ -52,8 +51,6 @@ func (m *MemberModel) Insert(member *models.MemberSVTC) error {
 	query += fmt.Sprintf("'%s'", member.Zip)
 	query += ")"
 
-	// fmt.Printf("%s \n", query)
-
 	stmt, err := m.DB.Prepare(query)
 	if err != nil {
 		return fmt.Errorf("prepare sql query failed: %w", err)
@@ -62,7 +59,6 @@ func (m *MemberModel) Insert(member *models.MemberSVTC) error {
 
 	result, err := stmt.Exec()
 	if err != nil {
-		// For reference https://github.com/mattn/go-sqlite3/blob/master/error.go
 		sqliteErr := err.(sqlite3.Error)
 		if sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
 			return fmt.Errorf("insert member failed: %w", errors.New("duplicate member"))
@@ -81,32 +77,254 @@ func (m *MemberModel) Insert(member *models.MemberSVTC) error {
 
 // --------------------------------------------------------------------------------------------
 
-// Function to query and return a list of valid members. Based on the specified expire date string
-// members will be filtered by status and expire date.
-func (m *MemberModel) List(expire string) ([]*models.MemberSVTC, error) {
+// Function to query and return a list of valid members filtered by the provided search member struct.
+// Based on the specified expire date string members will be filtered by status and expire date.
+func (m *MemberModel) ListMembers() ([]*models.MemberSVTC, error) {
 
 	query := "SELECT num, firstname, lastname, email, status, expired "
 	query += "FROM member "
 	query += "WHERE active = ? "
 
-	if expire != "1963-11-04" {
-		query += "AND status = ? "
-		query += "AND expired > ? "
-	}
-
-	// fmt.Printf("%s \n", query)
-
-	rows, err := m.DB.Query(query, 1, "Expired", expire)
+	rows, err := m.DB.Query(query, 1)
 	if err != nil {
 		return nil, fmt.Errorf("sql query failed: %w", err)
 	}
 	defer rows.Close()
 
-	// memberList := make([]MemberSVTC, 0)
 	memberList := []*models.MemberSVTC{}
 
 	for rows.Next() {
-		// Create a pointer to a new struct.
+
+		member := &models.MemberSVTC{}
+
+		err = rows.Scan(
+			&member.Num,
+			&member.FirstName,
+			&member.LastName,
+			&member.Email,
+			&member.Status,
+			&member.Expired,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("member sql query failed: %w", errors.New("no matching record found"))
+			} else {
+				return nil, fmt.Errorf("member sql query failed: %w", err)
+			}
+		}
+
+		memberList = append(memberList, member)
+
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("row iteraton error: %w", err)
+	}
+
+	return memberList, nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Function to query and return a list of valid members filtered by the provided search member struct.
+// Based on the specified expire date string members will be filtered by status and expire date.
+func (m *MemberModel) ListMatch(platform string, search *models.MemberSVTC) ([]*models.MemberSVTC, error) {
+
+	var query, lnamestr string
+
+	switch platform {
+
+	case "strava":
+
+		// The query for Strava uses Firstname and Initial of Lastname
+		// Example:
+		// 		select *
+		//		from member
+		// 		where active = 1
+		// 		and (firstname = 'Dave' and lastname like 'S%')
+		//		and status = 'Expired'
+		// 		and expired > '2001-01-31';
+
+		query = "SELECT num, firstname, lastname, email, status, expired "
+		query += "FROM member "
+		query += "WHERE active = ? "
+		query += "AND ((lower(firstname) = ? AND lower(lastname) LIKE ?) OR lower(email) = ?) "
+
+		if search.Status != "" {
+			query += "AND status = ? "
+		}
+
+		if search.Expired != "1963-11-04" {
+			query += "AND expired > ? "
+		}
+
+		lnamestr = search.LastName + string('%')
+
+	case "slack":
+
+		// The query for Slack uses (Firstname and Lastname) OR Email
+		// Example:
+		// 		select *
+		//		from member
+		// 		where active = 1
+		// 		and (firstname = 'Dave' and lastname = 'Scott') or (email = 'theman@gmail.com')
+		//		and status = 'Expired'
+		// 		and expired > '2001-01-31';
+
+		query = "SELECT num, firstname, lastname, email, status, expired "
+		query += "FROM member "
+		query += "WHERE active = ? "
+		query += "AND ((lower(firstname) = ? AND lower(lastname) = ?) OR lower(email) = ?) "
+
+		if search.Status != "" {
+			query += "AND status = ? "
+		}
+
+		if search.Expired != "1963-11-04" {
+			query += "AND expired > ? "
+		}
+
+		lnamestr = search.LastName
+
+	}
+
+	// Note: Expired status and expire date remain ignored if not added to query string above
+	rows, err := m.DB.Query(query, 1, search.FirstName, lnamestr, search.Email, search.Status, search.Expired)
+	if err != nil {
+		return nil, fmt.Errorf("sql query failed: %w", err)
+	}
+	defer rows.Close()
+
+	memberList := []*models.MemberSVTC{}
+
+	for rows.Next() {
+
+		member := &models.MemberSVTC{}
+
+		err = rows.Scan(
+			&member.Num,
+			&member.FirstName,
+			&member.LastName,
+			&member.Email,
+			&member.Status,
+			&member.Expired,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("member sql query failed: %w", errors.New("no matching record found"))
+			} else {
+				return nil, fmt.Errorf("member sql query failed: %w", err)
+			}
+		}
+
+		memberList = append(memberList, member)
+
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("row iteraton error: %w", err)
+	}
+
+	return memberList, nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Function to query and return a list of valid members filtered by the provided search member struct.
+// Based on the specified expire date string members will be filtered by status and expire date.
+func (m *MemberModel) ListAlias() ([]*models.MemberSVTC, []*models.MemberAlias, error) {
+
+	query := "SELECT member.num, member.firstname as mf, member.lastname as ml, member.email as me, "
+	query += "alias.firstname as af, alias.lastname as al, alias.email as ae "
+	query += "FROM member INNER JOIN alias ON member.id = alias.memberid "
+
+	rows, err := m.DB.Query(query)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sql query failed: %w", err)
+	}
+	defer rows.Close()
+
+	memberList := []*models.MemberSVTC{}
+	aliasList := []*models.MemberAlias{}
+
+	for rows.Next() {
+
+		member := &models.MemberSVTC{}
+		alias := &models.MemberAlias{}
+
+		err = rows.Scan(
+			&member.Num,
+			&member.FirstName,
+			&member.LastName,
+			&member.Email,
+			&alias.FirstName,
+			&alias.LastName,
+			&alias.Email,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, nil, fmt.Errorf("member sql query failed: %w", errors.New("no matching record found"))
+			} else {
+				return nil, nil, fmt.Errorf("member sql query failed: %w", err)
+			}
+		}
+
+		memberList = append(memberList, member)
+		aliasList = append(aliasList, alias)
+
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, nil, fmt.Errorf("row iteraton error: %w", err)
+	}
+
+	return memberList, aliasList, nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+// Function to query and return a list of valid members filtered by the provided search member struct.
+// Based on the specified expire date string members will be filtered by status and expire date.
+func (m *MemberModel) GetAlias(search *models.MemberSVTC) ([]*models.MemberSVTC, error) {
+
+	// Example:
+	// 		select *
+	// 		from member
+	// 		inner join alias on member.id = alias.memberid
+	// 		where member.active = 1
+	// 		and (alias.firstname = 'Dave' and alias.lastname = 'Scott') or (alias.email = 'theman@gmail.com')
+	//		and member.status = 'Expired'
+	// 		and member.expired > '2001-01-31';
+
+	query := "SELECT member.num, member.firstname, member.lastname, member.email, member.status, member.expired "
+	query += "FROM member INNER JOIN alias ON member.id = alias.memberid "
+	query += "WHERE member.active = ? "
+	query += "AND ((lower(alias.firstname) = ? AND lower(alias.lastname) = ?) OR lower(alias.email) = ?) "
+
+	if search.Status != "" {
+		query += "AND member.status = ? "
+	}
+
+	if search.Expired != "1963-11-04" {
+		query += "AND member.expired > ? "
+	}
+
+	rows, err := m.DB.Query(query, 1, search.FirstName, search.LastName, search.Email, search.Status, search.Expired)
+	if err != nil {
+		return nil, fmt.Errorf("sql query failed: %w", err)
+	}
+	defer rows.Close()
+
+	memberList := []*models.MemberSVTC{}
+
+	for rows.Next() {
+
 		member := &models.MemberSVTC{}
 
 		err = rows.Scan(
@@ -191,7 +409,6 @@ func (m *MemberModel) UpdateStatus(num, status, expired string) error {
 		}
 	}
 
-	// sql.ErrNoRows does not work here. Evaluate result.RowsAffected() instead.
 	_, err = result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("could not get rows affected: %w", err)

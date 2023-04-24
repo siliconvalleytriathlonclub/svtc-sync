@@ -119,6 +119,7 @@ func (app *Application) ActivesSync() error {
 				fmt.Printf("[%s] %s %s (New) -> (Active) %s \n", m.Num, m.FirstName, m.LastName, dstr)
 			} else {
 				m.Status = "Active"
+				m.Active = true
 				m.Expired = dstr
 				err = app.MemberSQL.Insert(m)
 				if err != nil {
@@ -156,15 +157,46 @@ func (app *Application) ActivesSync() error {
 
 // --------------------------------------------------------------------------------------------
 
-func (app *Application) CheckSlackMembers() error {
+func (app *Application) ListAlias() error {
 
-	// Query list of members from Sqlite3 DB. (-exp) flag will filter by status = Expire and expired date
-	mlSQL, err := app.MemberSQL.List(app.Config.Expire)
+	// Query alias table for members
+	ml, al, err := app.MemberSQL.ListAlias()
 	if err != nil {
-		app.ErrorLog.Printf("[ListMembers SQL] %s", err)
+		app.ErrorLog.Printf("[Alias SQL] %s", err)
 		return err
 	}
-	app.InfoLog.Printf("[CheckSlackMembers] Queried list of %d club members from %s", len(mlSQL), app.Config.DBfile)
+
+	for i, _ := range al {
+		fmt.Printf("[%s %s %s] \n", al[i].FirstName, al[i].LastName, al[i].Email)
+		fmt.Printf("\t[%s] %s %s (%s) \n", ml[i].Num, ml[i].FirstName, ml[i].LastName, ml[i].Email)
+	}
+
+	return nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+func (app *Application) ListMembers() error {
+
+	// Query alias table for members
+	ml, err := app.MemberSQL.ListMembers()
+	if err != nil {
+		app.ErrorLog.Printf("[Alias SQL] %s", err)
+		return err
+	}
+
+	for _, m := range ml {
+		fmt.Printf("%s %s %s %s %s %s \n", m.Num, m.FirstName, m.LastName, m.Email, m.Status, m.Expired)
+	}
+
+	return nil
+
+}
+
+// --------------------------------------------------------------------------------------------
+
+func (app *Application) CheckSlackMembers() error {
 
 	// Read Slack Bot Access Token from credentials file.
 	slack_access_token, err := app.Creds.GetSlackAccess()
@@ -180,19 +212,16 @@ func (app *Application) CheckSlackMembers() error {
 		app.ErrorLog.Printf("[ListUsers] %s", err)
 		return err
 	}
-	app.InfoLog.Printf("[CheckSlackMembers] Request list of %d workspace users from Slack web api", len(mlSlack))
+	app.InfoLog.Printf("[CheckSlackMembers] Requested list of %d workspace users from Slack web api", len(mlSlack))
 
 	// Sort workspace user list by first name (ignore upper / lowercase)
 	app.SlackMemberAPI.Sort(mlSlack)
 	app.InfoLog.Printf("[CheckSlackMembers] Sorted workspace user list alphabetically by firstname")
 
 	// Log output type and format as appropriate
-	if app.Config.Email && (app.Config.Output == "EXP") {
-		app.InfoLog.Printf("[CheckSlackMembers] Email flag set: generating output in Email address format")
-	}
 	app.InfoLog.Printf("[CheckSlackMembers] Generating %s output of matches with %s \n\n", app.Config.Output, app.Config.DBfile)
 
-	// Iterate over list of Slack workspace users/members and check against reference member list
+	// Iterate over list of Slack workspace users/members and check against reference member DB
 	for _, mSlack := range mlSlack {
 
 		// Ignore bot or app records (this flag is set to false for those in Slack)
@@ -200,23 +229,31 @@ func (app *Application) CheckSlackMembers() error {
 			continue
 		}
 
-		// Slice of Members to hold the results of the comparison
-		ml := []*models.MemberSVTC{}
-
-		// Iterate over refrence data to apply filter criteria
-		for _, m := range mlSQL {
-
-			// Match on either firstname and lastname or match on email, skip test record if no match
-			if !((strings.EqualFold(mSlack.Profile.FirstName, m.FirstName) &&
-				strings.EqualFold(mSlack.Profile.LastName, m.LastName)) ||
-				strings.EqualFold(mSlack.Profile.Email, m.Email)) {
-
-				continue
-			}
-
-			ml = append(ml, m)
-
+		// Populate a new search member struct with query criteria
+		ms := models.MemberSVTC{
+			FirstName: strings.ToLower(mSlack.Profile.FirstName),
+			LastName:  strings.ToLower(mSlack.Profile.LastName),
+			Email:     strings.ToLower(mSlack.Profile.Email),
+			Status:    models.StatusMap[app.Config.Output],
+			Expired:   app.Config.Expire,
 		}
+
+		// Query list of members from Sqlite3 DB using query criteria according to (firstname AND lastname) OR email
+		ml, err := app.MemberSQL.ListMatch("slack", &ms)
+		if err != nil {
+			app.ErrorLog.Printf("[ListMembers SQL] %s", err)
+			return err
+		}
+
+		// Query alias table for members using same search criteria
+		ma, err := app.MemberSQL.GetAlias(&ms)
+		if err != nil {
+			app.ErrorLog.Printf("[Alias SQL] %s", err)
+			return err
+		}
+
+		// Append matches from alias table to result set
+		ml = append(ml, ma...)
 
 		// Sort results of comparison by expiration date
 		app.sort(ml, "exp")
@@ -241,7 +278,7 @@ func (app *Application) CheckSlackMembers() error {
 				}
 			}
 
-		case "EXP":
+		case "EXP", "ACT", "TRI":
 
 			// Print records that have a non-active status. When email flag is set, print in RFC 5322 format
 			if len(ml) > 0 {
@@ -277,14 +314,6 @@ func (app *Application) CheckSlackMembers() error {
 
 func (app *Application) CheckStravaMembers() error {
 
-	// Query list of members from Sqlite3 DB. (-exp) flag will filter by status = Expire and expired date
-	mlSQL, err := app.MemberSQL.List(app.Config.Expire)
-	if err != nil {
-		app.ErrorLog.Printf("[ListMembers SQL] %s", err)
-		return err
-	}
-	app.InfoLog.Printf("[CheckStravaMembers] Queried list of %d club members from %s", len(mlSQL), app.Config.DBfile)
-
 	// Check Strava Access Token expiration date. Request new one if expired.
 	app.InfoLog.Printf("[CheckStravaMembers] Check for expiration of Strava api access token \n")
 	strava_access_token, err := app.Creds.CheckStravaExp()
@@ -299,7 +328,7 @@ func (app *Application) CheckStravaMembers() error {
 		app.ErrorLog.Printf("[Get] %s", err)
 		return err
 	}
-	app.InfoLog.Printf("[CheckStravaMembers] Request data from Strava api for %s \n", cStrava.Name)
+	app.InfoLog.Printf("[CheckStravaMembers] Requested data from Strava api for %s \n", cStrava.Name)
 
 	// Get list of athletes (club members) of Strava club
 	mlStrava, err := app.StravaAthleteAPI.List(cStrava.MemberCount, strava_access_token)
@@ -307,38 +336,43 @@ func (app *Application) CheckStravaMembers() error {
 		app.ErrorLog.Printf("[ListAthletes] %s", err)
 		return err
 	}
-	app.InfoLog.Printf("[CheckStravaMembers] Request list of %d club athletes from Strava api", len(mlStrava))
+	app.InfoLog.Printf("[CheckStravaMembers] Requested list of %d club athletes from Strava api", len(mlStrava))
 
 	// Sort athlete list (club members) by first name (ignore upper/lower case)
 	app.StravaAthleteAPI.Sort(mlStrava)
 	app.InfoLog.Printf("[CheckStravaMembers] Sorted club athlete list alphabetically by firstname")
 
 	// Log output type and format as appropriate
-	if app.Config.Email && (app.Config.Output == "EXP") {
-		app.InfoLog.Printf("[CheckStravaMembers] Email flag set: generating output in Email address format")
-	}
 	app.InfoLog.Printf("[CheckStravaMembers] Generating %s output of matches with %s \n\n", app.Config.Output, app.Config.DBfile)
 
-	// Iterate over list of Strava club athletes and check if present in reference member list
+	// Iterate over list of Strava club athletes and check if present in reference DB
 	for _, mStrava := range mlStrava {
 
-		// Slice of Members to hold the results of the comparison
-		ml := []*models.MemberSVTC{}
-
-		// Iterate over refrence data to apply filter criteria
-		for _, m := range mlSQL {
-
-			// Trim leading or trailing white space from Strava names
-			// Match on firstname and first letter lastname, skip test record if no match
-			if !(strings.EqualFold(strings.TrimSpace(mStrava.FirstName), m.FirstName) &&
-				strings.EqualFold(strings.TrimSpace(string(mStrava.LastName[0])), string(m.LastName[0]))) {
-
-				continue
-			}
-
-			ml = append(ml, m)
-
+		// Populate a new member search struct with query criteria
+		ms := models.MemberSVTC{
+			FirstName: strings.ToLower(strings.TrimSpace(mStrava.FirstName)),
+			LastName:  strings.ToLower(strings.TrimSpace(string(mStrava.LastName[0]))),
+			Email:     string('_'),
+			Status:    models.StatusMap[app.Config.Output],
+			Expired:   app.Config.Expire,
 		}
+
+		// Query list of members from Sqlite3 DB using query criteria according to (firstname AND lastname%)
+		ml, err := app.MemberSQL.ListMatch("strava", &ms)
+		if err != nil {
+			app.ErrorLog.Printf("[ListMembers SQL] %s", err)
+			return err
+		}
+
+		// Query alias table for members using same criteria
+		ma, err := app.MemberSQL.GetAlias(&ms)
+		if err != nil {
+			app.ErrorLog.Printf("[Alias SQL] %s", err)
+			return err
+		}
+
+		// Append matches from alias table to result set
+		ml = append(ml, ma...)
 
 		// Sort results of comparison by expiration date
 		app.sort(ml, "exp")
@@ -351,6 +385,7 @@ func (app *Application) CheckStravaMembers() error {
 			// Print record not found in reference
 			if len(ml) == 0 {
 				fmt.Printf("[%s %s] Not Found \n", mStrava.FirstName, mStrava.LastName)
+				///fmt.Printf("insert into alias (memberid, firstname, lastname, email) values=(NNNN, '%s', '%s', '');\n", mStrava.FirstName, mStrava.LastName)
 			}
 
 		case "DUP":
@@ -363,7 +398,7 @@ func (app *Application) CheckStravaMembers() error {
 				}
 			}
 
-		case "EXP":
+		case "EXP", "ACT", "TRI":
 
 			// Print records that have a expired status. When email flag is set, print in RFC 5322 format
 			if len(ml) > 0 {
