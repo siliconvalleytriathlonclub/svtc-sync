@@ -59,7 +59,7 @@ Optionally, to test access and the validity of the of the JSON file, a raw dump 
 
 ### Member and Aliases
 
-In order to increase matches for member's that have chosen to use alternate names (first or last names) or email addresses, aliases are managed in a separate tablem that is linked to Member IDs and utilized during check / match functions. A single member may have several alias records that are all considered. Note: that the first match found will be used. Alias records are created and updated outside the scope of this tool.
+In order to increase matches for members that have chosen to use alternate names (first or last names) or email addresses, aliases are managed in a separate table, that is linked to Member IDs and utilized during check / match functions. A single member may have several alias records that are all considered. Note: that the first match found will be used. Alias records are created and updated outside the scope of this tool.
 
 A user may list the content of the `Alias Table` via the command line argument `alias`. The output is a complete list of aliases with their mapped reference record, i.e.
 
